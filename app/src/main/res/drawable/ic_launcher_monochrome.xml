@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Monochrome variant for Android 13+ themed icons. The system tints this with the user's
+  chosen accent so only the silhouette matters. Keep paths within the 66dp safe zone of the
+  108dp viewport (inner 36 .. 72), and avoid the black accents from the foreground — those
+  rely on a known background which the system overrides here.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Left page -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M 28,40 L 52,44 L 52,74 L 28,70 Z" />
+
+    <!-- Right page -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M 80,40 L 56,44 L 56,74 L 80,70 Z" />
+</vector>

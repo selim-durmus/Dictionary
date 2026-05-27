@@ -1,0 +1,15 @@
+[project]
+name = "translate-data-pipeline"
+version = "0.1.0"
+description = "Builds the offline SQLite dictionary shipped inside the Translate Android app."
+requires-python = ">=3.10"
+dependencies = [
+    "tqdm>=4.66",
+]
+
+[project.scripts]
+build-dictionary = "build_dictionary:main"
+
+[tool.setuptools]
+py-modules = ["build_dictionary"]
+packages = ["sources"]

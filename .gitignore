@@ -1,0 +1,28 @@
+# --- Android Studio / Gradle ---
+*.iml
+.gradle/
+local.properties
+.DS_Store
+/build
+/app/build
+/captures
+.externalNativeBuild
+.cxx
+
+# IntelliJ / Android Studio workspace state
+.idea/
+!.idea/codeStyles/
+!.idea/inspectionProfiles/
+
+# --- Python data pipeline ---
+data-pipeline/.venv/
+data-pipeline/cache/
+data-pipeline/build/
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+.pytest_cache/
+
+# --- OS junk ---
+Thumbs.db
+ehthumbs.db
