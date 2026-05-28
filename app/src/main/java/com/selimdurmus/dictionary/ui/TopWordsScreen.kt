@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -37,18 +38,43 @@ fun TopWordsScreen(
 ) {
     val vm: TopWordsViewModel = viewModel(factory = repositoryViewModelFactory(repository))
     val top by vm.top.collectAsStateWithLifecycle()
+    val pendingClearAt by vm.pendingClearAt.collectAsStateWithLifecycle()
 
     Column(modifier = modifier.fillMaxSize().background(Background).padding(horizontal = 20.dp)) {
-        Text(
-            text = "Top 50",
-            style = MaterialTheme.typography.labelMedium,
-            color = OnMuted,
-            modifier = Modifier.padding(top = 28.dp, bottom = 16.dp),
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 28.dp, bottom = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "Top 50",
+                style = MaterialTheme.typography.labelMedium,
+                color = OnMuted,
+                modifier = Modifier.weight(1f),
+            )
+            if (pendingClearAt == null && top.isNotEmpty()) {
+                TextButton(onClick = { vm.clearAll() }) {
+                    Text("Clear", color = Gold, style = MaterialTheme.typography.labelMedium)
+                }
+            }
+        }
+
+        pendingClearAt?.let { stamp ->
+            UndoClearBanner(
+                startMs = stamp,
+                durationMs = TopWordsViewModel.UNDO_WINDOW_MS,
+                message = "Cleared top words",
+                onUndo = { vm.undoClear() },
+                modifier = Modifier.padding(bottom = 12.dp),
+            )
+        }
 
         if (top.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Look up a few words to fill this list", style = MaterialTheme.typography.bodyMedium, color = OnMuted)
+                Text(
+                    if (pendingClearAt != null) "" else "Look up a few words to fill this list",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = OnMuted,
+                )
             }
         } else {
             LazyColumn(

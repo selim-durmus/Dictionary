@@ -28,4 +28,8 @@ class DictionaryRepository(
     fun topStream(limit: Int = 50): Flow<List<SearchStat>> = stats.observeTop(limit)
 
     suspend fun deleteRecent(word: String, lang: String) = recents.delete(word, lang)
+
+    suspend fun clearRecents() = recents.clear()
+
+    suspend fun clearTopWords() = stats.clear()
 }

@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -16,6 +17,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -29,6 +31,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.selimdurmus.dictionary.data.DictionaryRepository
 import com.selimdurmus.dictionary.data.Recent
 import com.selimdurmus.dictionary.ui.theme.Background
+import com.selimdurmus.dictionary.ui.theme.Gold
 import com.selimdurmus.dictionary.ui.theme.OnHigh
 import com.selimdurmus.dictionary.ui.theme.OnMuted
 
@@ -41,18 +44,43 @@ fun RecentsScreen(
 ) {
     val vm: RecentsViewModel = viewModel(factory = repositoryViewModelFactory(repository))
     val recents by vm.recents.collectAsStateWithLifecycle()
+    val pendingClearAt by vm.pendingClearAt.collectAsStateWithLifecycle()
 
     Column(modifier = modifier.fillMaxSize().background(Background).padding(horizontal = 20.dp)) {
-        Text(
-            text = "Recents",
-            style = MaterialTheme.typography.labelMedium,
-            color = OnMuted,
-            modifier = Modifier.padding(top = 28.dp, bottom = 16.dp),
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 28.dp, bottom = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "Recents",
+                style = MaterialTheme.typography.labelMedium,
+                color = OnMuted,
+                modifier = Modifier.weight(1f),
+            )
+            if (pendingClearAt == null && recents.isNotEmpty()) {
+                TextButton(onClick = { vm.clearAll() }) {
+                    Text("Clear", color = Gold, style = MaterialTheme.typography.labelMedium)
+                }
+            }
+        }
+
+        pendingClearAt?.let { stamp ->
+            UndoClearBanner(
+                startMs = stamp,
+                durationMs = RecentsViewModel.UNDO_WINDOW_MS,
+                message = "Cleared recents",
+                onUndo = { vm.undoClear() },
+                modifier = Modifier.padding(bottom = 12.dp),
+            )
+        }
 
         if (recents.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("No recent lookups", style = MaterialTheme.typography.bodyMedium, color = OnMuted)
+                Text(
+                    if (pendingClearAt != null) "" else "No recent lookups",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = OnMuted,
+                )
             }
         } else {
             LazyColumn(
