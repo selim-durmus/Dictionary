@@ -1,0 +1,243 @@
+package com.selimdurmus.dictionary.data
+
+import kotlin.math.abs
+
+class EntryDao(private val dictionary: DictionaryDb) {
+
+    /**
+     * Prefix-match FTS across both translation directions. If the FTS pass returns too few hits on
+     * a long-ish query, fall back to a Damerau-Levenshtein scan over a small candidate pool so
+     * typos like ``comtemplate`` still surface ``contemplate``.
+     */
+    suspend fun search(
+        query: String,
+        limit: Int = 200,
+        filter: LangFilter = LangFilter.ALL,
+    ): SearchResults {
+        val cleaned = query.trim()
+        if (cleaned.isEmpty()) return SearchResults(emptyList())
+
+        val fts = ftsSearch(cleaned, limit, filter)
+
+        // Wiktionary ships "Misspelling of X" / "Alternative spelling of X" entries as their own
+        // rows. If the user typed exactly one of those headwords AND it has no real-meaning
+        // senses, follow the redirect to X and surface it via the suggestion banner.
+        followRedirect(cleaned, fts)?.let { return it }
+
+        val needsFuzzy = fts.size < FUZZY_TRIGGER && cleaned.length >= FUZZY_MIN_LEN
+        if (!needsFuzzy) return SearchResults(fts)
+
+        val remaining = limit - fts.size
+        if (remaining <= 0) return SearchResults(fts)
+        val seen = fts.mapTo(HashSet()) { it.sourceWord to it.sourceLang }
+        val fuzzy = fuzzySearch(cleaned, remaining, seen, filter)
+        // Only call it a "did you mean" when the prefix scan was empty — otherwise the FTS hits
+        // are the user's intent and fuzzy entries are just supplementary.
+        val suggestion = if (fts.isEmpty()) fuzzy.firstOrNull()?.sourceWord else null
+        return SearchResults(fts + fuzzy, suggestion)
+    }
+
+    private suspend fun followRedirect(cleaned: String, fts: List<Entry>): SearchResults? {
+        val matching = fts.filter { it.sourceWord.equals(cleaned, ignoreCase = true) }
+        if (matching.isEmpty()) return null
+        val targets = matching.mapNotNull { redirectTarget(it.targetWord) }
+        // Require ALL senses of this headword to be redirects — otherwise the user's typed word
+        // has real meaning that we shouldn't hide.
+        if (targets.size != matching.size) return null
+        val mostCommon = targets.groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
+            ?: return null
+        val targetEntries = entriesFor(mostCommon, matching.first().sourceLang)
+        if (targetEntries.isEmpty()) return null
+        return SearchResults(targetEntries, suggestion = mostCommon)
+    }
+
+    private fun redirectTarget(targetWord: String): String? {
+        val lower = targetWord.lowercase()
+        val prefix = REDIRECT_PREFIXES.firstOrNull { lower.startsWith(it) } ?: return null
+        val raw = targetWord.substring(prefix.length).trim().trimEnd('.')
+        if (raw.isEmpty()) return null
+        // Target sometimes has trailing metadata like ", from Latin..." — cut at the first such marker.
+        val end = raw.indexOfAny(charArrayOf(',', ';', '(', '[', ':'))
+        val word = (if (end >= 0) raw.substring(0, end) else raw).trim()
+        return word.ifEmpty { null }
+    }
+
+    /** Full entry list for a single headword (used by EntryDetail). */
+    suspend fun entriesFor(word: String, lang: String): List<Entry> = query(
+        """
+        SELECT id, source_word, source_lang, target_word, target_lang, pos, category, definition, sense_order
+        FROM entries
+        WHERE source_word = ? AND source_lang = ?
+        ORDER BY category, sense_order
+        """.trimIndent(),
+        arrayOf(word, lang),
+    )
+
+    private fun ftsSearch(cleaned: String, limit: Int, filter: LangFilter): List<Entry> {
+        val pattern = sanitizeFtsToken(cleaned) + "*"
+        // Ranking: exact headword first (case-insensitive), then shorter source words (closer to
+        // the query length), then language / category / sense for stability. Without the first
+        // two clauses the order is purely alphabetical-by-lang, which buries the exact match
+        // under every other-language headword that shares the prefix.
+        return query(
+            """
+            SELECT e.id, e.source_word, e.source_lang, e.target_word, e.target_lang,
+                   e.pos, e.category, e.definition, e.sense_order
+            FROM entries_fts f
+            JOIN entries e ON e.id = f.rowid
+            WHERE entries_fts MATCH ?${filter.entriesClause("e.")}
+            ORDER BY (LOWER(e.source_word) = LOWER(?)) DESC,
+                     LENGTH(e.source_word) ASC,
+                     e.source_lang,
+                     e.category,
+                     e.sense_order
+            LIMIT ?
+            """.trimIndent(),
+            arrayOf(pattern, cleaned, limit.toString()),
+        )
+    }
+
+    private suspend fun fuzzySearch(
+        cleaned: String,
+        limit: Int,
+        exclude: Set<Pair<String, String>>,
+        filter: LangFilter,
+    ): List<Entry> {
+        val lowered = cleaned.lowercase()
+        val firstChar = lowered.first()
+        val minLen = (lowered.length - FUZZY_MAX_DISTANCE).coerceAtLeast(2)
+        val maxLen = lowered.length + FUZZY_MAX_DISTANCE
+
+        val ranked = candidateWords(firstChar, minLen, maxLen, filter)
+            .asSequence()
+            .filter { (word, lang) -> (word to lang) !in exclude }
+            .map { (word, lang) ->
+                Triple(word, lang, damerauLevenshtein(lowered, word.lowercase(), FUZZY_MAX_DISTANCE))
+            }
+            .filter { it.third <= FUZZY_MAX_DISTANCE }
+            .sortedBy { it.third }
+            .take(FUZZY_MAX_WORDS)
+            .toList()
+
+        return ranked.flatMap { (word, lang, _) -> entriesFor(word, lang) }.take(limit)
+    }
+
+    private fun candidateWords(
+        firstChar: Char,
+        minLen: Int,
+        maxLen: Int,
+        filter: LangFilter,
+    ): List<Pair<String, String>> {
+        // Range [firstChar, firstChar+1) on the indexed (source_word, source_lang) tuple — uses
+        // idx_entries_source for a prefix scan, then the length filter prunes in-row.
+        val lower = firstChar.toString()
+        val upper = (firstChar.code + 1).toChar().toString()
+        val out = ArrayList<Pair<String, String>>()
+        dictionary.raw().rawQuery(
+            """
+            SELECT DISTINCT source_word, source_lang FROM entries
+            WHERE source_word >= ? AND source_word < ?
+              AND LENGTH(source_word) BETWEEN ? AND ?
+              ${filter.entriesClause()}
+            """.trimIndent(),
+            arrayOf(lower, upper, minLen.toString(), maxLen.toString()),
+        ).use { c ->
+            while (c.moveToNext()) out += c.getString(0) to c.getString(1)
+        }
+        return out
+    }
+
+    private fun LangFilter.entriesClause(prefix: String = ""): String = when (this) {
+        LangFilter.ALL -> ""
+        LangFilter.EN_TR -> " AND ${prefix}source_lang = 'en' AND ${prefix}target_lang = 'tr'"
+        LangFilter.TR_EN -> " AND ${prefix}source_lang = 'tr' AND ${prefix}target_lang = 'en'"
+    }
+
+    private fun query(sql: String, args: Array<String>): List<Entry> {
+        val db = dictionary.raw()
+        val out = ArrayList<Entry>()
+        db.rawQuery(sql, args).use { c ->
+            while (c.moveToNext()) {
+                out += Entry(
+                    id = c.getLong(0),
+                    sourceWord = c.getString(1),
+                    sourceLang = c.getString(2),
+                    targetWord = c.getString(3),
+                    targetLang = c.getString(4),
+                    pos = c.getStringOrNull(5),
+                    category = c.getString(6),
+                    definition = c.getStringOrNull(7),
+                    senseOrder = c.getInt(8),
+                )
+            }
+        }
+        return out
+    }
+
+    private fun android.database.Cursor.getStringOrNull(idx: Int): String? =
+        if (isNull(idx)) null else getString(idx)
+
+    private fun sanitizeFtsToken(s: String): String {
+        // FTS4 query operators we strip rather than escape — easier than reasoning about each.
+        // After cleanup the query is space-separated tokens (implicit AND in FTS4); the trailing
+        // ``*`` we append in `search()` becomes a prefix match on the final token.
+        return s.replace(Regex("[\"*:\\-()]"), " ").trim().replace(Regex("\\s+"), " ")
+    }
+
+    private fun damerauLevenshtein(a: String, b: String, max: Int): Int {
+        if (a == b) return 0
+        if (abs(a.length - b.length) > max) return Int.MAX_VALUE
+        if (a.isEmpty()) return b.length
+        if (b.isEmpty()) return a.length
+
+        val al = a.length
+        val bl = b.length
+        val d = Array(al + 1) { IntArray(bl + 1) }
+        for (i in 0..al) d[i][0] = i
+        for (j in 0..bl) d[0][j] = j
+
+        for (i in 1..al) {
+            var rowMin = Int.MAX_VALUE
+            for (j in 1..bl) {
+                val cost = if (a[i - 1] == b[j - 1]) 0 else 1
+                var v = minOf(
+                    d[i - 1][j] + 1,
+                    d[i][j - 1] + 1,
+                    d[i - 1][j - 1] + cost,
+                )
+                if (i > 1 && j > 1 && a[i - 1] == b[j - 2] && a[i - 2] == b[j - 1]) {
+                    v = minOf(v, d[i - 2][j - 2] + 1)
+                }
+                d[i][j] = v
+                if (v < rowMin) rowMin = v
+            }
+            if (rowMin > max) return Int.MAX_VALUE
+        }
+        return d[al][bl]
+    }
+
+    companion object {
+        private const val FUZZY_TRIGGER = 5
+        private const val FUZZY_MIN_LEN = 4
+        private const val FUZZY_MAX_DISTANCE = 2
+        private const val FUZZY_MAX_WORDS = 8
+
+        // Wiktionary gloss prefixes that mark an entry as pointing at another headword rather
+        // than carrying its own meaning. Compared case-insensitively against the target_word.
+        private val REDIRECT_PREFIXES = listOf(
+            "misspelling of ",
+            "common misspelling of ",
+            "mis-spelling of ",
+            "alternative spelling of ",
+            "alternative form of ",
+            "obsolete spelling of ",
+            "archaic spelling of ",
+            "rare spelling of ",
+            "nonstandard spelling of ",
+            "informal spelling of ",
+            "eye dialect of ",
+            "pronunciation spelling of ",
+            "misconstruction of ",
+        )
+    }
+}

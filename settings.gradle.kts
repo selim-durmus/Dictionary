@@ -19,5 +19,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Translate"
+rootProject.name = "Dictionary"
 include(":app")

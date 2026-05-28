@@ -24,7 +24,8 @@ CREATE TABLE entries (
     pos          TEXT,
     category     TEXT    NOT NULL,
     definition   TEXT,
-    sense_order  INTEGER NOT NULL DEFAULT 0
+    sense_order  INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(source_word, source_lang, target_word, target_lang)
 );
 
 CREATE VIRTUAL TABLE entries_fts USING fts4(
@@ -56,21 +57,16 @@ def build(rows: Iterable[Row], out_path: Path, *, batch_size: int = 10000) -> in
         conn.executescript(SCHEMA)
 
         insert = (
-            "INSERT INTO entries "
+            "INSERT OR IGNORE INTO entries "
             "(source_word, source_lang, target_word, target_lang, pos, category, definition, sense_order) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
         )
 
-        seen: set[tuple[str, str, str, str]] = set()
         batch: list[tuple] = []
         total = 0
 
         with tqdm(desc="insert", unit="rows", unit_scale=True) as bar:
             for row in rows:
-                key = (row.source_word, row.source_lang, row.target_word, row.target_lang)
-                if key in seen:
-                    continue
-                seen.add(key)
                 batch.append((
                     row.source_word, row.source_lang,
                     row.target_word, row.target_lang,
@@ -87,11 +83,14 @@ def build(rows: Iterable[Row], out_path: Path, *, batch_size: int = 10000) -> in
                 total += len(batch)
 
         conn.commit()
+        # `total` counts attempted inserts; UNIQUE conflicts are silently ignored. Read back the
+        # true distinct row count for the caller's log line.
+        kept = conn.execute("SELECT COUNT(*) FROM entries").fetchone()[0]
         conn.executescript(FINALIZE)
         conn.commit()
         conn.execute("VACUUM")
         conn.commit()
-        return total
+        return kept
     finally:
         conn.close()
 

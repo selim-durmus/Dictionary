@@ -103,7 +103,9 @@ def parse_english(jsonl_path: Path) -> Iterator[Row]:
 
     Translations live on ``senses[].translations`` (per-sense) in the English Kaikki dump.
     The top-level ``translations`` array is often present but doesn't always reflect all senses,
-    so we walk both and let the row-level dedupe in db.build collapse overlaps.
+    so we walk both. For senses lacking a Turkish translation we fall back to the English gloss
+    itself (en→en row), so words like "propagate" — which Wiktionary doesn't translate to TR — are
+    still searchable and show their meaning.
     """
     for entry in _iter_jsonl(jsonl_path, desc="parse en"):
         word = entry.get("word")
@@ -117,8 +119,16 @@ def parse_english(jsonl_path: Path) -> Iterator[Row]:
         for sense_idx, sense in enumerate(senses):
             sense_tags = _collect_tags(sense)
             sense_category = categorize(sense_tags)
+
+            sense_had_tr = False
             for tr in sense.get("translations") or []:
                 row = _en_translation_row(word, pos_str, sense_category, sense_idx, tr)
+                if row is not None:
+                    sense_had_tr = True
+                    yield row
+
+            if not sense_had_tr:
+                row = _en_gloss_row(word, pos_str, sense_category, sense_idx, sense)
                 if row is not None:
                     yield row
 
@@ -155,3 +165,38 @@ def _en_translation_row(
         definition=definition,
         sense_order=sense_idx,
     )
+
+
+def _en_gloss_row(
+    word: str, pos: str | None, category: str, sense_idx: int, sense: dict
+) -> Row | None:
+    """Fallback en→en row when a sense has no Turkish translation. ``target_word`` is the first
+    sentence of the gloss (short enough for a search row); the full gloss lives in ``definition``.
+    """
+    for gloss in sense.get("glosses") or []:
+        if not isinstance(gloss, str):
+            continue
+        text = gloss.strip()
+        if not text:
+            continue
+        head = _first_sentence(text)
+        return Row(
+            source_word=word,
+            source_lang="en",
+            target_word=head,
+            target_lang="en",
+            pos=pos,
+            category=category,
+            definition=text if text != head else None,
+            sense_order=sense_idx,
+        )
+    return None
+
+
+def _first_sentence(text: str, max_len: int = 120) -> str:
+    # Cut at first ". " to avoid splitting abbreviations like "U.S.". Then trim and ellipsize.
+    head = text.split(". ", 1)[0] if ". " in text else text
+    head = head.rstrip(".").strip()
+    if len(head) > max_len:
+        head = head[: max_len - 1].rstrip() + "…"
+    return head

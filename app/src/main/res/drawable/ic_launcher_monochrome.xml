@@ -1,9 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Monochrome variant for Android 13+ themed icons. The system tints this with the user's
-  chosen accent so only the silhouette matters. Keep paths within the 66dp safe zone of the
-  108dp viewport (inner 36 .. 72), and avoid the black accents from the foreground — those
-  rely on a known background which the system overrides here.
+  Monochrome variant for Android 13+ themed icons. The system tints the alpha channel with the
+  user's accent — color is ignored, only alpha matters. Page-line accents from the foreground
+  rely on a known background and disappear here, so we punch them out of the page silhouette
+  with evenOdd fillType. The cutout areas read as the launcher's negative space, leaving
+  visible lines on the tinted book.
+
+  Keep paths within the 66dp safe zone of the 108dp viewport (inner 36 .. 72).
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
@@ -11,13 +14,21 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Left page -->
+    <!-- Left page with 3 line cutouts -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M 28,40 L 52,44 L 52,74 L 28,70 Z" />
+        android:fillType="evenOdd"
+        android:pathData="M 28,40 L 52,44 L 52,74 L 28,70 Z
+                          M 30,49 L 47,51.5 L 47,53.5 L 30,51 Z
+                          M 30,57 L 45,59.5 L 45,61.5 L 30,59 Z
+                          M 30,65 L 43,67.5 L 43,69.5 L 30,67 Z" />
 
-    <!-- Right page -->
+    <!-- Right page with 3 line cutouts (mirrored) -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M 80,40 L 56,44 L 56,74 L 80,70 Z" />
+        android:fillType="evenOdd"
+        android:pathData="M 80,40 L 56,44 L 56,74 L 80,70 Z
+                          M 61,51.5 L 78,49 L 78,51 L 61,53.5 Z
+                          M 63,59.5 L 78,57 L 78,59 L 63,61.5 Z
+                          M 65,67.5 L 78,65 L 78,67 L 65,69.5 Z" />
 </vector>

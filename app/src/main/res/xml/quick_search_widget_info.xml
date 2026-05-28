@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Resizable horizontally from 1×1 up to ~5×1. Key invariants:
+    * minResizeWidth MUST be strictly less than minWidth — otherwise launchers treat them
+      as one value and refuse to shrink below the default placement size.
+    * maxResizeWidth needs slack above 4 × cell_width (Pixel cells run ~95-100dp).
+    * targetCellWidth (API 31+) is the launcher-preferred initial size, not a min/max.
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="140dp"
+    android:minHeight="40dp"
+    android:minResizeWidth="40dp"
+    android:minResizeHeight="40dp"
+    android:maxResizeWidth="560dp"
+    android:maxResizeHeight="80dp"
+    android:targetCellWidth="2"
+    android:targetCellHeight="1"
+    android:updatePeriodMillis="0"
+    android:initialLayout="@layout/widget_quick_search"
+    android:previewLayout="@layout/widget_quick_search"
+    android:widgetCategory="home_screen"
+    android:resizeMode="horizontal"
+    android:description="@string/widget_description" />

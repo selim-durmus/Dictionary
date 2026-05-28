@@ -7,4 +7,13 @@
         <item name="android:navigationBarColor">@android:color/black</item>
         <item name="android:windowLightStatusBar">false</item>
     </style>
+
+    <!-- Activity that hosts the widget's dialog-style search popup. Translucent so the home
+         screen stays visible underneath; Compose draws the floating card and handles the dim. -->
+    <style name="Theme.Translate.QuickSearch" parent="android:Theme.Translucent.NoTitleBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
 </resources>
