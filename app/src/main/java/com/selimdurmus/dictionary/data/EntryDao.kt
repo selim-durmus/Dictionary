@@ -75,10 +75,12 @@ class EntryDao(private val dictionary: DictionaryDb) {
 
     private fun ftsSearch(cleaned: String, limit: Int, filter: LangFilter): List<Entry> {
         val pattern = sanitizeFtsToken(cleaned) + "*"
-        // Ranking: exact headword first (case-insensitive), then shorter source words (closer to
-        // the query length), then language / category / sense for stability. Without the first
-        // two clauses the order is purely alphabetical-by-lang, which buries the exact match
-        // under every other-language headword that shares the prefix.
+        // Ranking, top to bottom:
+        //   1. exact headword match (case-insensitive)
+        //   2. cross-language rows (real translations) over same-language rows (the en→en gloss
+        //      fallback we emit when Wiktionary has no Turkish translation for a sense)
+        //   3. shorter source words — closer length to the query usually means closer relevance
+        //   4. language / category / sense for stable, deterministic order
         return query(
             """
             SELECT e.id, e.source_word, e.source_lang, e.target_word, e.target_lang,
@@ -87,6 +89,7 @@ class EntryDao(private val dictionary: DictionaryDb) {
             JOIN entries e ON e.id = f.rowid
             WHERE entries_fts MATCH ?${filter.entriesClause("e.")}
             ORDER BY (LOWER(e.source_word) = LOWER(?)) DESC,
+                     (e.target_lang != e.source_lang) DESC,
                      LENGTH(e.source_word) ASC,
                      e.source_lang,
                      e.category,
