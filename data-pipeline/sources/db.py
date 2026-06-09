@@ -25,6 +25,10 @@ CREATE TABLE entries (
     category     TEXT    NOT NULL,
     definition   TEXT,
     sense_order  INTEGER NOT NULL DEFAULT 0,
+    -- Provenance tier used for ranking: 'wiktionary' for dump-sourced rows, 'mt' for
+    -- OPUS-MT machine translations that fill the en→en gloss gap (see translate_gap.py).
+    -- Wiktionary rows outrank MT rows in the app.
+    source       TEXT    NOT NULL DEFAULT 'wiktionary',
     UNIQUE(source_word, source_lang, target_word, target_lang)
 );
 

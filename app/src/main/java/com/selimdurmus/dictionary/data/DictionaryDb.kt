@@ -22,7 +22,8 @@ class DictionaryDb private constructor(private val db: SQLiteDatabase) {
     companion object {
         private const val ASSET_NAME = "dictionary.db"
         private const val LOCAL_NAME = "dictionary.db"
-        private const val VERSION = 2
+        // 3: en→tr OPUS-MT translations added to fill the en→en gloss gap (+ `source` column).
+        private const val VERSION = 3
         private const val VERSION_FILE = "dictionary.version"
 
         fun open(context: Context): DictionaryDb {

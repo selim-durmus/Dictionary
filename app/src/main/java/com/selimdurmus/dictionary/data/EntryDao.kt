@@ -68,7 +68,7 @@ class EntryDao(private val dictionary: DictionaryDb) {
         SELECT id, source_word, source_lang, target_word, target_lang, pos, category, definition, sense_order
         FROM entries
         WHERE source_word = ? AND source_lang = ?
-        ORDER BY category, sense_order
+        ORDER BY ${tierExpr("")}, category, sense_order
         """.trimIndent(),
         arrayOf(word, lang),
     )
@@ -77,8 +77,8 @@ class EntryDao(private val dictionary: DictionaryDb) {
         val pattern = sanitizeFtsToken(cleaned) + "*"
         // Ranking, top to bottom:
         //   1. exact headword match (case-insensitive)
-        //   2. cross-language rows (real translations) over same-language rows (the en→en gloss
-        //      fallback we emit when Wiktionary has no Turkish translation for a sense)
+        //   2. provenance tier — real Wiktionary translations, then OPUS-MT machine translations,
+        //      then the same-language en→en gloss fallback (see tierExpr)
         //   3. shorter source words — closer length to the query usually means closer relevance
         //   4. language / category / sense for stable, deterministic order
         return query(
@@ -89,7 +89,7 @@ class EntryDao(private val dictionary: DictionaryDb) {
             JOIN entries e ON e.id = f.rowid
             WHERE entries_fts MATCH ?${filter.entriesClause("e.")}
             ORDER BY (LOWER(e.source_word) = LOWER(?)) DESC,
-                     (e.target_lang != e.source_lang) DESC,
+                     ${tierExpr("e.")} ASC,
                      LENGTH(e.source_word) ASC,
                      e.source_lang,
                      e.category,
@@ -148,6 +148,31 @@ class EntryDao(private val dictionary: DictionaryDb) {
             while (c.moveToNext()) out += c.getString(0) to c.getString(1)
         }
         return out
+    }
+
+    /**
+     * Ranking tier: real cross-language translations (0) above OPUS-MT machine translations (1)
+     * above same-language en→en gloss fallbacks (2). Lower sorts first.
+     *
+     * Older DBs (shipped before the MT pass) have no `source` column; there we collapse to the
+     * original two-tier split so the query still runs instead of erroring on a missing column.
+     */
+    private fun tierExpr(prefix: String): String =
+        if (hasSourceColumn)
+            "CASE WHEN ${prefix}target_lang != ${prefix}source_lang AND ${prefix}source != 'mt' THEN 0 " +
+                "WHEN ${prefix}target_lang != ${prefix}source_lang THEN 1 ELSE 2 END"
+        else
+            "CASE WHEN ${prefix}target_lang != ${prefix}source_lang THEN 0 ELSE 2 END"
+
+    private val hasSourceColumn: Boolean by lazy {
+        dictionary.raw().rawQuery("PRAGMA table_info(entries)", null).use { c ->
+            val nameIdx = c.getColumnIndex("name")
+            var found = false
+            while (c.moveToNext()) {
+                if (c.getString(nameIdx) == "source") { found = true; break }
+            }
+            found
+        }
     }
 
     private fun LangFilter.entriesClause(prefix: String = ""): String = when (this) {
