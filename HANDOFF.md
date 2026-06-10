@@ -113,50 +113,44 @@ Use **`Helsinki-NLP/opus-mt-tc-big-en-tr`** (Marian-NMT, ~230M params, CC-BY-4.0
 | Reverse-lookup from existing tr→en rows | $0 | 90% on 6K words, but 0/3 on user's test words (imperceptible, propagate, serendipity) | Inherited from Wiktionary | ✗ Doesn't cover the long tail at all |
 | FreeDict eng-tur | $0 | High but stale (~2005) | **GPL** | Skip for now — GPL copyleft is a flag for the Android APK |
 
-### Implementation — DONE (built + verified, not yet run)
+### Implementation — DONE + RUN COMPLETE ✅
 
-All code landed and verified (Python compiles + import-clean, SQL flow tested end-to-end on a synthetic DB, Android app compiles):
+All code landed and verified; deps installed; both models converted; pilots reshaped the approach (below); **full run complete**. **Status: 876,968 MT rows in the DB → 879,148 distinct English words now have a Turkish translation (~65% headword coverage, up from ~3%). DB 480 MB → 661 MB (VACUUMed). Copied into `app/src/main/assets/dictionary.db`. Remaining: rebuild app + spot-check in-app, then commit.** Full run took ~1h49m at ~185 word/s (8-core CPU, int8, threaded).
 
-1. **`data-pipeline/sources/translate.py`** — `OpusTranslator` wrapping CTranslate2 + HF tokenizer, and `ensure_ct2_model()` which converts a HF Marian model to CT2 int8 once. Heavy deps (`ctranslate2`/`transformers`/`torch`) are lazy-imported so the rest of the pipeline runs without them.
-2. **`data-pipeline/translate_gap.py`** (`python -m translate_gap`) — reads en→en gloss rows **per sense** (homographs stay distinct), builds carrier strings `"<headword>: <gloss>"`, batch-translates, extracts the Turkish headword by splitting on the first `:`. Round-trip confidence filter (tr→en, chrF vs original via sacrebleu, default threshold **0.4**, `--no-back-translate` to skip). Inserts en→tr rows tagged **`source='mt'`** *alongside* the en→en rows (augment, not replace), then re-indexes the new rowids into FTS + optimize. **Resumable** — a `NOT EXISTS` guard skips senses that already have an MT row, so a killed run continues. Flags: `--limit`, `--sample N`, `--threshold`, `--batch-size`, `--beam`, `--db`.
-3. **Schema/ranking** — `db.py` adds a `source TEXT NOT NULL DEFAULT 'wiktionary'` column. `translate_gap` ALTERs it onto a pre-existing DB so the MT step runs against the current 480 MB asset **without** a multi-GB reparse. `EntryDao.tierExpr()` ranks **real Wiktionary translations (0) > MT (1) > en→en gloss (2)**; it falls back to the old two-tier split if the `source` column is absent (won't crash on an old DB).
+1. **`data-pipeline/sources/translate.py`** — `OpusTranslator` (CTranslate2 + HF tokenizer, lazy heavy deps) and `ensure_ct2_model()` (one-time HF→CT2 int8 convert). Defaults: `beam_size=1`, **`inter_threads=4`, `intra_threads=2`** (the threading is the main CPU lever — the original run used the default `inter=1` and left 7/8 cores idle, hence the early 33→11 row/s slowdown).
+2. **`data-pipeline/translate_gap.py`** (`python -m translate_gap`) — **translates distinct en→en headwords, headword-only** (not per-sense, not carrier — see pilot findings). Inserts one en→tr row per word tagged **`source='mt'`** alongside the en→en rows. Echo-drop is the only filter (output == source → model couldn't translate it). **Resumable**: `NOT EXISTS` skips words that already have an MT row; FTS index is **rebuilt** at the end of each run (so let a resume run to completion). Flags: `--limit`, `--sample N`, `--beam`, `--back-translate` (off), `--db`.
+3. **Schema/ranking** — `db.py` adds `source TEXT NOT NULL DEFAULT 'wiktionary'`. `translate_gap` ALTERs it onto a pre-existing DB (no multi-GB reparse needed). `EntryDao.tierExpr()` ranks **real Wiktionary (0) > MT (1) > en→en gloss (2)**; degrades to a two-tier split if the column is absent.
 4. **`DictionaryDb.VERSION` 2 → 3** so installs re-copy the MT-augmented DB.
-5. **`scripts/build-dictionary.sh`** — MT step runs by default after the parse phase; `--no-translate-gap` opts out, `--mt-limit N` pilots. Installs the MT deps into the venv only when the step runs.
-6. **`LICENSES.md`** — CC-BY-4.0 attribution for OPUS-MT (Helsinki-NLP/Tatoeba) + Wiktionary/Kaikki + CTranslate2. (No About screen exists yet; revisit if one is added.)
+5. **`scripts/build-dictionary.sh`** — MT step on by default; `--no-translate-gap` / `--mt-limit N`. Installs MT deps only when the step runs.
+6. **`LICENSES.md`** — CC-BY-4.0 attribution (OPUS-MT/Tatoeba) + Wiktionary/Kaikki + CTranslate2.
 
-### Next step → Running it
+**Pilot findings that reshaped the approach** (don't re-litigate these):
+- **Carrier sentences gave no benefit.** The model translates a headword context-independently, so `"word: gloss"` carriers added no keep-rate, often *worse* quality (singularised plurals, left rarer words in English), and were ~10× slower (sequence length dominates CPU decode). → headword-only.
+- **Per-sense was redundant.** All senses of a word produce the same Turkish word → translate distinct words once (1.67M → 1.36M).
+- **Back-translation chrF filter is noise** on isolated words (chrF≈0 for correct translations); it dropped ~24/27 *good* outputs and doubled runtime. The model's own sequence score doesn't separate good from echoed either. → echo-drop only, back-translation off by default.
+- **Keep-rate ~54–61%** on representative real words; the rest echo (kept as English-gloss fallback). Quality spot-checked good (`imperceptible→algılanamaz`, `ubiquitous→yaygın`, `amniocentesis→amniyosentez`).
 
-The pipeline has **never been run** — no model has been downloaded/converted and no MT rows exist in the DB. Running it is a heavy, deliberate operation (installs `torch` ~2 GB, downloads + converts two Marian models, then hours of CPU inference), so it was left for an explicit, supervised run. Do this:
+### Next step → Rebuild app + spot-check + commit
 
-```bash
-cd data-pipeline
-.venv/bin/pip install ctranslate2 transformers sentencepiece sacrebleu torch
+The run is complete and the 661 MB DB is already copied into `app/src/main/assets/dictionary.db` (VERSION=3 so it re-copies on launch). Remaining:
 
-# 200-row pilot, print samples to eyeball quality + the colon-split extraction
-.venv/bin/python3 -m translate_gap --limit 200 --sample 40
+1. **Rebuild the app** in Android Studio (or `./gradlew :app:assembleDebug`) and **spot-check in-app**: search `imperceptible` (→ algılanamaz, MT), `propagate` (→ çoğaltma, MT), `book` (→ kitap, real Wiktionary wins), `serendipity` (English gloss fallback — echoed). Confirm MT rows render and rank below Wiktionary rows in EntryDetail.
+2. **Commit** the still-uncommitted pipeline + app changes once in-app behavior is confirmed.
 
-# 10K-row pilot to extrapolate full-run wall-clock (the handoff estimate is 4–8 h on M2 CPU)
-.venv/bin/python3 -m translate_gap --limit 10000
+To re-run from scratch later (e.g. after a fresh DB build): `./scripts/build-dictionary.sh` does parse → MT → copy. Models are cached under `data-pipeline/models/` (gitignored); deps are in the venv.
 
-# tune --threshold from the sampled chrF distribution, then the full run (resumable)
-.venv/bin/python3 -m translate_gap
-```
+**Note:** code changes (headword-only, distinct-word, threading, resume-safe FTS + VACUUM, schema/ranking, VERSION bump, LICENSES.md) are currently **uncommitted** per the repo owner's call.
 
-Then `cp build/dictionary.db ../app/src/main/assets/` (or just `./scripts/build-dictionary.sh`, which now does the MT step + copy), rebuild the app, and spot-check `imperceptible`, `propagate`, `serendipity` in search.
+### Remaining risks / things to verify
 
-### Risks & things to verify before committing the overnight run
-
-- **Single-word inputs hallucinate.** Use carrier sentences. Sample 200 random outputs after a 10K-row pilot before running the full 1.34M.
-- **Homographs** (`bank`, `right`, `spring`) collapse to one Turkish word per call. Translate **per sense** (each en→en row separately) rather than once per headword.
-- **Apple Silicon throughput has no public benchmark.** Run a 10K-row sample first to extrapolate wall-clock. Estimate is 4–8 h overnight on M2 CPU at int8, but could be 2× off.
-- **Quality on technical/medical/legal jargon will be weaker** — opus-mt model card warns it's general-domain. The confidence filter should catch most of these.
-- **Storage delta**: ~30–50 MB on top of the existing 480 MB DB (depending on whether we replace or add). APK ships at ~510 → ~540 MB.
-- **CC-BY-4.0 attribution** is easy to forget. Add a credit line at the same time as the translations land.
+- **Quality on technical/medical/legal jargon is weaker** (opus-mt is general-domain) — but MT rows rank below real translations and the en→en gloss remains, so it degrades gracefully.
+- **Storage delta**: spot-check the final DB size after the run; expect ~+20–40 MB (one row per kept word). APK ~510 → ~530–540 MB.
+- **Spot-check in the app**, not just the DB — confirm MT rows render and rank below Wiktionary rows in EntryDetail.
 
 ## Open questions / decisions deferred
 
 - ~~**Replace or augment en→en rows with MT translations?**~~ **Decided: augment** — MT rows (`source='mt'`) sit above the en→en gloss rows, which stay as a final fallback.
-- **Quality threshold for the confidence filter** — defaults to chrF 0.4; needs empirical tuning after the pilot sample.
+- ~~**Confidence filter / threshold**~~ **Decided: echo-drop only** — back-translation chrF was piloted and rejected (noise on isolated words).
 - **PanLex augmentation** as a follow-up after the MT pass — adds dictionary-quality entries on top of MT output. Worth doing if MT quality alone isn't enough.
 - **Disk footprint** — 540 MB total install is heavy. Long-term, opening SQLite directly from the APK asset (via [requery/sqlite-android](https://github.com/requery/sqlite-android) + `ParcelFileDescriptor`) would halve the on-device footprint by removing the duplicate copy. Currently deferred.
 

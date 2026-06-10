@@ -49,15 +49,20 @@ class OpusTranslator:
         *,
         device: str = "cpu",
         compute_type: str = "int8",
-        beam_size: int = 4,
+        beam_size: int = 1,
+        inter_threads: int = 4,
+        intra_threads: int = 2,
     ) -> None:
         import ctranslate2
         import transformers
 
         self._beam = beam_size
         self._tokenizer = transformers.AutoTokenizer.from_pretrained(hf_model)
+        # inter_threads runs several batches in parallel — the big CPU lever on short inputs
+        # (the default of 1 leaves most cores idle). intra_threads parallelizes within a batch.
         self._translator = ctranslate2.Translator(
-            str(ct2_dir), device=device, compute_type=compute_type
+            str(ct2_dir), device=device, compute_type=compute_type,
+            inter_threads=inter_threads, intra_threads=intra_threads,
         )
 
     def translate(self, texts: list[str], *, max_batch_size: int = 64) -> list[str]:

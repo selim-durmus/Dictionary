@@ -70,9 +70,9 @@ echo "==> Building dictionary.db ${flags[*]:-(turkish only)}"
 if [[ $translate_gap -eq 1 && $include_en -eq 1 ]]; then
   echo "==> Ensuring MT dependencies (ctranslate2, transformers, sentencepiece, sacrebleu, torch)"
   .venv/bin/pip install --quiet ctranslate2 transformers sentencepiece sacrebleu torch
-  mt_flags=()
+  mt_flags=(--prune)  # drop en→en rows superseded by an MT translation (#12), shrinks the DB
   [[ -n $mt_limit ]] && mt_flags+=(--limit "$mt_limit")
-  echo "==> Filling en→en gap with OPUS-MT ${mt_flags[*]:-(full run — this takes hours)}"
+  echo "==> Filling en→en gap with OPUS-MT + prune ${mt_flags[*]}"
   .venv/bin/python3 -m translate_gap "${mt_flags[@]}"
 elif [[ $translate_gap -eq 0 ]]; then
   echo "==> Skipping OPUS-MT gap-fill (--no-translate-gap)"
