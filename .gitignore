@@ -3,6 +3,11 @@
 .gradle/
 local.properties
 .DS_Store
+
+# --- Release signing secrets (never commit) ---
+keystore.properties
+*.jks
+*.keystore
 /build
 /app/build
 /captures

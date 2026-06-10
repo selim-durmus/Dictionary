@@ -1,5 +1,7 @@
 package com.selimdurmus.dictionary.data
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlin.math.abs
 
 class EntryDao(private val dictionary: DictionaryDb) {
@@ -8,33 +10,36 @@ class EntryDao(private val dictionary: DictionaryDb) {
      * Prefix-match FTS across both translation directions. If the FTS pass returns too few hits on
      * a long-ish query, fall back to a Damerau-Levenshtein scan over a small candidate pool so
      * typos like ``comtemplate`` still surface ``contemplate``.
+     *
+     * Runs on [Dispatchers.IO] — these are synchronous SQLite reads against a ~1.6M-row DB and
+     * must not block the main thread (callers collect on viewModelScope, i.e. Main).
      */
     suspend fun search(
         query: String,
         limit: Int = 200,
         filter: LangFilter = LangFilter.ALL,
-    ): SearchResults {
+    ): SearchResults = withContext(Dispatchers.IO) {
         val cleaned = query.trim()
-        if (cleaned.isEmpty()) return SearchResults(emptyList())
+        if (cleaned.isEmpty()) return@withContext SearchResults(emptyList())
 
         val fts = ftsSearch(cleaned, limit, filter)
 
         // Wiktionary ships "Misspelling of X" / "Alternative spelling of X" entries as their own
         // rows. If the user typed exactly one of those headwords AND it has no real-meaning
         // senses, follow the redirect to X and surface it via the suggestion banner.
-        followRedirect(cleaned, fts)?.let { return it }
+        followRedirect(cleaned, fts)?.let { return@withContext it }
 
         val needsFuzzy = fts.size < FUZZY_TRIGGER && cleaned.length >= FUZZY_MIN_LEN
-        if (!needsFuzzy) return SearchResults(fts)
+        if (!needsFuzzy) return@withContext SearchResults(fts)
 
         val remaining = limit - fts.size
-        if (remaining <= 0) return SearchResults(fts)
+        if (remaining <= 0) return@withContext SearchResults(fts)
         val seen = fts.mapTo(HashSet()) { it.sourceWord to it.sourceLang }
         val fuzzy = fuzzySearch(cleaned, remaining, seen, filter)
         // Only call it a "did you mean" when the prefix scan was empty — otherwise the FTS hits
         // are the user's intent and fuzzy entries are just supplementary.
         val suggestion = if (fts.isEmpty()) fuzzy.firstOrNull()?.sourceWord else null
-        return SearchResults(fts + fuzzy, suggestion)
+        SearchResults(fts + fuzzy, suggestion)
     }
 
     private suspend fun followRedirect(cleaned: String, fts: List<Entry>): SearchResults? {
@@ -62,16 +67,18 @@ class EntryDao(private val dictionary: DictionaryDb) {
         return word.ifEmpty { null }
     }
 
-    /** Full entry list for a single headword (used by EntryDetail). */
-    suspend fun entriesFor(word: String, lang: String): List<Entry> = query(
+    /** Full entry list for a single headword (used by EntryDetail). Runs off the main thread. */
+    suspend fun entriesFor(word: String, lang: String): List<Entry> = withContext(Dispatchers.IO) {
+        query(
         """
         SELECT id, source_word, source_lang, target_word, target_lang, pos, category, definition, sense_order
         FROM entries
         WHERE source_word = ? AND source_lang = ?
         ORDER BY ${tierExpr("")}, category, sense_order
         """.trimIndent(),
-        arrayOf(word, lang),
-    )
+            arrayOf(word, lang),
+        )
+    }
 
     private fun ftsSearch(cleaned: String, limit: Int, filter: LangFilter): List<Entry> {
         val pattern = sanitizeFtsToken(cleaned) + "*"

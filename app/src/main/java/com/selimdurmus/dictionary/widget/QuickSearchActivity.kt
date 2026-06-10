@@ -22,7 +22,9 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -53,10 +55,21 @@ import com.selimdurmus.dictionary.ui.theme.TranslateTheme
 class QuickSearchActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val repository = (application as TranslateApp).container.repository
+        val container = (application as TranslateApp).container
         setContent {
             TranslateTheme {
-                QuickSearchDialog(repository = repository, onDismiss = { finish() })
+                // Don't touch the repository until the bundled DB is copied out of assets —
+                // a first-ever launch via the widget could otherwise hit a missing file.
+                var ready by remember { mutableStateOf(container.isReady()) }
+                LaunchedEffect(Unit) {
+                    if (!ready) {
+                        container.ensureReady()
+                        ready = true
+                    }
+                }
+                if (ready) {
+                    QuickSearchDialog(repository = container.repository, onDismiss = { finish() })
+                }
             }
         }
     }

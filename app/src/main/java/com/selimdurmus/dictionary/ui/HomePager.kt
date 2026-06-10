@@ -2,36 +2,38 @@ package com.selimdurmus.dictionary.ui
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.selimdurmus.dictionary.data.DictionaryRepository
 import com.selimdurmus.dictionary.ui.theme.Background
 import com.selimdurmus.dictionary.ui.theme.Gold
-import com.selimdurmus.dictionary.ui.theme.GoldDim
+import com.selimdurmus.dictionary.ui.theme.OnMuted
+import kotlinx.coroutines.launch
 
 private const val PAGE_COUNT = 3
+private val TAB_TITLES = listOf("Search", "Recents", "Top 50")
 
 @Composable
 fun HomePager(
@@ -75,10 +77,9 @@ fun HomePager(
             }
         }
 
-        DotIndicator(
-            current = pagerState.currentPage,
-            total = PAGE_COUNT,
-            modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
+        TabBar(
+            pagerState = pagerState,
+            modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
         )
     }
 
@@ -92,25 +93,24 @@ fun HomePager(
 }
 
 @Composable
-private fun DotIndicator(current: Int, total: Int, modifier: Modifier = Modifier) {
-    Row(
-        modifier = modifier,
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        repeat(total) { idx ->
-            val active = idx == current
-            val fill by animateColorAsState(
-                targetValue = if (active) Gold else Background,
-                label = "dot-$idx-fill",
+private fun TabBar(pagerState: PagerState, modifier: Modifier = Modifier) {
+    val scope = rememberCoroutineScope()
+    Row(modifier = modifier, horizontalArrangement = Arrangement.SpaceEvenly) {
+        TAB_TITLES.forEachIndexed { index, title ->
+            val active = pagerState.currentPage == index
+            val color by animateColorAsState(
+                targetValue = if (active) Gold else OnMuted,
+                label = "tab-$index-color",
             )
-            Box(
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelMedium,
+                color = color,
+                textAlign = TextAlign.Center,
                 modifier = Modifier
-                    .padding(horizontal = 6.dp)
-                    .size(7.dp)
-                    .clip(CircleShape)
-                    .border(width = 1.dp, color = if (active) Gold else GoldDim, shape = CircleShape)
-                    .background(fill, CircleShape),
+                    .weight(1f)
+                    .clickable { scope.launch { pagerState.animateScrollToPage(index) } }
+                    .padding(vertical = 6.dp),
             )
         }
     }
