@@ -42,6 +42,7 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
@@ -134,6 +135,19 @@ fun SearchScreen(
             modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
         )
 
+        TurkishLetterRow(
+            onInsert = { ch ->
+                val sel = fieldValue.selection
+                val text = fieldValue.text
+                val newText = text.substring(0, sel.start) + ch + text.substring(sel.end)
+                val newCursor = sel.start + ch.length
+                fieldValue = TextFieldValue(newText, TextRange(newCursor))
+                vm.query.value = newText
+                focusRequester.requestFocus() // keep the field focused + keyboard up
+            },
+            modifier = Modifier.padding(top = 12.dp),
+        )
+
         LangFilterChips(
             current = filter,
             onSelect = { vm.filter.value = it },
@@ -162,6 +176,32 @@ fun SearchScreen(
                     ResultRow(entry, onClick = { onOpen(EntryTarget(entry.sourceWord, entry.sourceLang)) })
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun TurkishLetterRow(
+    onInsert: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    // Turkish-specific letters absent from a standard English keyboard. Lowercase only —
+    // search is case-insensitive, so these cover the cases users can't otherwise type.
+    val letters = listOf("ç", "ğ", "ı", "ö", "ş", "ü")
+    Row(modifier = modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        letters.forEach { letter ->
+            Text(
+                text = letter,
+                style = MaterialTheme.typography.titleMedium,
+                color = Gold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(8.dp))
+                    .border(1.dp, Gold, RoundedCornerShape(8.dp))
+                    .clickable { onInsert(letter) }
+                    .padding(vertical = 8.dp),
+            )
         }
     }
 }
