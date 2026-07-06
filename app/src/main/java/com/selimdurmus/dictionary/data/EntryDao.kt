@@ -84,7 +84,7 @@ class EntryDao(private val dictionary: DictionaryDb) {
         val pattern = sanitizeFtsToken(cleaned) + "*"
         // Ranking, top to bottom:
         //   1. exact headword match (case-insensitive)
-        //   2. provenance tier — real Wiktionary translations, then OPUS-MT machine translations,
+        //   2. provenance tier — real Wiktionary translations, then Claude per-sense, then OPUS-MT,
         //      then the same-language en→en gloss fallback (see tierExpr)
         //   3. shorter source words — closer length to the query usually means closer relevance
         //   4. language / category / sense for stable, deterministic order
@@ -158,18 +158,27 @@ class EntryDao(private val dictionary: DictionaryDb) {
     }
 
     /**
-     * Ranking tier: real cross-language translations (0) above OPUS-MT machine translations (1)
-     * above same-language en→en gloss fallbacks (2). Lower sorts first.
+     * Ranking tier (lower sorts first), for cross-language rows by provenance:
+     *   0  real Wiktionary translations (source='wiktionary')
+     *   1  Claude per-sense machine translations (source='llm') — dictionary grade
+     *   2  OPUS-MT per-word machine translations (source='mt') — fallback
+     *   3  PanLex CC0 dictionary entries (source='panlex') — only fills genuine gaps; ranked
+     *      below MT so its noisier long-tail entries never override a Wiktionary/OPUS translation
+     *   4  same-language fallbacks: en→en glosses and Turkish→Turkish TDK definitions
+     *      (source='tdk'). For a Turkish headword these rank just below any tr→en translation, so
+     *      the Turkish meaning surfaces when there's no English one (see ingest_tdk.py).
      *
      * Older DBs (shipped before the MT pass) have no `source` column; there we collapse to the
      * original two-tier split so the query still runs instead of erroring on a missing column.
      */
     private fun tierExpr(prefix: String): String =
         if (hasSourceColumn)
-            "CASE WHEN ${prefix}target_lang != ${prefix}source_lang AND ${prefix}source != 'mt' THEN 0 " +
-                "WHEN ${prefix}target_lang != ${prefix}source_lang THEN 1 ELSE 2 END"
+            "CASE WHEN ${prefix}target_lang != ${prefix}source_lang AND ${prefix}source = 'wiktionary' THEN 0 " +
+                "WHEN ${prefix}target_lang != ${prefix}source_lang AND ${prefix}source = 'llm' THEN 1 " +
+                "WHEN ${prefix}target_lang != ${prefix}source_lang AND ${prefix}source = 'mt' THEN 2 " +
+                "WHEN ${prefix}target_lang != ${prefix}source_lang THEN 3 ELSE 4 END"
         else
-            "CASE WHEN ${prefix}target_lang != ${prefix}source_lang THEN 0 ELSE 2 END"
+            "CASE WHEN ${prefix}target_lang != ${prefix}source_lang THEN 0 ELSE 4 END"
 
     private val hasSourceColumn: Boolean by lazy {
         dictionary.raw().rawQuery("PRAGMA table_info(entries)", null).use { c ->
