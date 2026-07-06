@@ -1,12 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   Monochrome variant for Android 13+ themed icons. The system tints the alpha channel with the
-  user's accent — color is ignored, only alpha matters. Page-line accents from the foreground
-  rely on a known background and disappear here, so we punch them out of the page silhouette
-  with evenOdd fillType. The cutout areas read as the launcher's negative space, leaving
-  visible lines on the tinted book.
+  user's accent — color is ignored, only alpha matters. The whole book is one evenOdd path: the
+  two pages are the filled silhouette, and the spine slit + six text lines are punched out as
+  cutouts, so they read as the launcher's negative space on the tinted book.
 
-  Keep paths within the 66dp safe zone of the 108dp viewport (inner 36 .. 72).
+  Mirrors the foreground shape. Keep geometry inside the ~66dp safe circle of the 108dp viewport.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
@@ -14,21 +13,16 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Left page with 3 line cutouts -->
     <path
         android:fillColor="#FFFFFF"
         android:fillType="evenOdd"
-        android:pathData="M 28,40 L 52,44 L 52,74 L 28,70 Z
-                          M 30,49 L 47,51.5 L 47,53.5 L 30,51 Z
-                          M 30,57 L 45,59.5 L 45,61.5 L 30,59 Z
-                          M 30,65 L 43,67.5 L 43,69.5 L 30,67 Z" />
-
-    <!-- Right page with 3 line cutouts (mirrored) -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:fillType="evenOdd"
-        android:pathData="M 80,40 L 56,44 L 56,74 L 80,70 Z
-                          M 61,51.5 L 78,49 L 78,51 L 61,53.5 Z
-                          M 63,59.5 L 78,57 L 78,59 L 63,61.5 Z
-                          M 65,67.5 L 78,65 L 78,67 L 65,69.5 Z" />
+        android:pathData="M54,45 C45,40 34,38.5 23,41 L23,67 C34,64.5 45,66 54,71 Z
+                          M54,45 C63,40 74,38.5 85,41 L85,67 C74,64.5 63,66 54,71 Z
+                          M53.2,45.5 L54.8,45.5 L54.8,70.5 L53.2,70.5 Z
+                          M29,49.5 L47,51.5 L47,53 L29,51 Z
+                          M29,55.5 L45,57.5 L45,59 L29,57 Z
+                          M29,61.5 L43,63.5 L43,65 L29,63 Z
+                          M79,49.5 L61,51.5 L61,53 L79,51 Z
+                          M79,55.5 L63,57.5 L63,59 L79,57 Z
+                          M79,61.5 L65,63.5 L65,65 L79,63 Z" />
 </vector>
