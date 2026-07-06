@@ -143,14 +143,19 @@ class EntryDao(private val dictionary: DictionaryDb) {
         val lower = firstChar.toString()
         val upper = (firstChar.code + 1).toChar().toString()
         val out = ArrayList<Pair<String, String>>()
+        // minLen/maxLen are inlined as integer literals, NOT bound as args. rawQuery binds every
+        // arg as TEXT, and SQLite treats an INTEGER (the LENGTH result) as less than ANY text
+        // value — so `LENGTH(...) BETWEEN '4' AND '8'` is false for every row, which silently
+        // returned zero fuzzy candidates (the whole "did you mean" path was dead). These are
+        // app-computed Ints, so interpolating them is injection-safe and keeps the compare integer.
         dictionary.raw().rawQuery(
             """
             SELECT DISTINCT source_word, source_lang FROM entries
             WHERE source_word >= ? AND source_word < ?
-              AND LENGTH(source_word) BETWEEN ? AND ?
+              AND LENGTH(source_word) BETWEEN $minLen AND $maxLen
               ${filter.entriesClause()}
             """.trimIndent(),
-            arrayOf(lower, upper, minLen.toString(), maxLen.toString()),
+            arrayOf(lower, upper),
         ).use { c ->
             while (c.moveToNext()) out += c.getString(0) to c.getString(1)
         }
