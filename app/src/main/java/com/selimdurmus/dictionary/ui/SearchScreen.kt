@@ -155,7 +155,7 @@ fun SearchScreen(
         )
 
         results.suggestion?.let { word ->
-            CorrectionBanner(suggested = word)
+            CorrectionBanner(suggested = word, isLemma = results.isLemma)
         }
 
         if (query.isNotBlank() && results.entries.isEmpty()) {
@@ -241,9 +241,9 @@ private fun FilterChip(
 }
 
 @Composable
-private fun CorrectionBanner(suggested: String) {
+private fun CorrectionBanner(suggested: String, isLemma: Boolean = false) {
     val text = buildAnnotatedString {
-        append("Showing results for ")
+        append(if (isLemma) "Form of " else "Showing results for ")
         withStyle(SpanStyle(color = Gold)) { append(suggested) }
     }
     Text(
@@ -275,7 +275,7 @@ private fun ResultRow(entry: Entry, onClick: () -> Unit) {
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
-        val meta = listOfNotNull(entry.pos, entry.category).joinToString(" · ")
+        val meta = listOfNotNull(entry.pos, entry.category, entry.sourceLabel).joinToString(" · ")
         if (meta.isNotEmpty()) {
             Text(
                 text = meta,

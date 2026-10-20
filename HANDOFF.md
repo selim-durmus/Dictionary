@@ -8,7 +8,33 @@ Offline EN↔TR dictionary Android app. Compose UI, Room for user state, SQLite 
 
 MVP is functional and feature-complete: 3-tab pager (Search/Recents/Top 50), entry-detail bottom sheet, fuzzy search, "Did you mean" suggestion banner, EN↔TR direction filter, auto-record recents, swipe-to-delete recents, clear-with-undo on Recents and Top 50, home-screen quick-search widget with translucent popup activity, custom monochrome launcher icon.
 
-**The open problem: only ~45K of ~1.36M English headwords have Turkish translations.** ~98% of English entries fall back to English glosses (1.67M en→en rows) because Wiktionary didn't ship a Turkish translation. The OPUS-MT gap-fill **pipeline is now built and verified** (see "Next step" below) — what remains is *running* it: a 10K-row pilot to sample quality + estimate wall-clock, then the full overnight run. No MT rows are in the DB yet.
+**The open problem: missing translations.** Measure it with `cd data-pipeline && python -m coverage_report --words` (OpenSubtitles top-50K words per language in rank bands + the hand-picked list in `coverage_words.py`). See "Coverage work (2026-10-19)" below for where it stands; the OPUS-MT sections further down are history.
+
+## Coverage work (2026-10-19)
+
+Measured on a fresh build (Kaikki dumps of 2026-10-03). "Dictionary" = hand-written dictionary data (Wiktionary EN + TR editions, reverse pairs); "any" also counts PanLex/MT.
+
+| | before (Wiktionary + TDK only) | after free sources (dictionary / any) |
+|---|---|---|
+| EN→TR, top 1K words | 77% | 92% / 98.5% |
+| EN→TR, 1K–5K | 57% | 81% / 93.5% |
+| EN→TR, 5K–20K | 33% | 66% / 82.5% |
+| TR→EN, top 1K | 55% | 95% |
+| TR→EN, 1K–5K | 33% | 85% |
+| TR→EN, 5K–20K | 19% | 78% |
+
+What changed (all $0, offline at runtime):
+- **`forms` table + lemma fallback** (`ingest_forms.py`, `EntryDao.lemmaFallback`). Turkish is agglutinative; `gidiyorum`, `evlerimizden`, `kitabı` now resolve to `gitmek`, `ev`, `kitap` with a "Form of X" banner. English too (`went → go`, `children → child`). Grammar-note senses get category `Inflection` in `parse.py` and rank below real translations. Biggest single TR→EN win.
+- **Turkish Wiktionary edition** (`ingest_trwiktionary.py`, `source='trwiktionary'`): English words defined in Turkish (propagate, lease, commute…) + Turkish words' English translation tables.
+- **Reverse pairs** (`derive_reverse.py`, `source='wiktionary-rev'`): en→tr tables flipped into tr→en and short tr→en glosses flipped into en→tr.
+- **PanLex on by default**, matched to lowercase headwords first (it used to attach "Goldfish → Kılıçbalığı" to a proper-noun headword).
+- **OPUS-MT demoted**: runs last, only for single words with no Turkish from any source, no `--prune` (the English gloss stays), ranked below PanLex. Pilot showed idioms rendered literally (piece of cake → kek parçası), collapsed polysemy (match → maç only) and confident errors (hassle → leylek).
+- **App**: `Entry.source` + a visible label for machine translation / AI / PanLex rows; tier order dictionary > reverse/trwiktionary > llm > panlex > mt > same-language/inflection notes. `versionCode` 5 so installs re-copy the DB.
+
+Still open (in priority order):
+1. **Turkish forms Wiktionary has no table for** (`gerektiğini`, `yaptığını`, `kendini`): ~14–28% of TR words in the 1K–50K bands. Use Zemberek (Apache-2.0) at build time over a large Turkish word list to extend `forms`.
+2. **Per-sense quality via Claude**: no API key (Pro plan), so run it with Haiku subagents in Claude Code. Pilot 2026-10-19: 2,000 senses in 4 parallel Haiku agents moved the 5-hour meter 36→43% and weekly 15→16%; output quality good, TR→EN from TDK definitions excellent. Target only words whose best translation is PanLex/definition-only (≈13K words in the top 50K, ≈4K in the top 20K), first 1–2 senses — the random-sense pilot showed most untranslated senses of common words are archaic.
+3. DB size: 684 MB before MT (the Turkish `forms` links are ~2.3M rows). Frequency-filtering forms or opening the asset in place (requery/sqlite-android) would cut the on-device footprint.
 
 ## How to resume in a new chat
 

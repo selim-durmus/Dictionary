@@ -90,9 +90,16 @@ def fetch_words(conn: sqlite3.Connection, limit: int | None) -> list[tuple]:
         WHERE e.source_lang = 'en' AND e.target_lang = 'en' AND e.source = 'wiktionary'
           -- Skip headwords with no Latin letter (bare punctuation / numerals like '%', '0', '@').
           AND e.source_word GLOB '*[A-Za-z]*'
+          -- Multi-word headwords are idioms/phrasal verbs, which OPUS renders word-for-word
+          -- ("piece of cake" → "kek parçası"); leave those to the English gloss.
+          AND e.source_word NOT LIKE '% %'
+          -- Inflection notes ("simple past of go") are resolved via the forms table instead.
+          AND e.category != 'Inflection'
+          -- Last-resort tier: only words with no Turkish from ANY source (Wiktionary, reverse
+          -- index, tr.wiktionary, PanLex, a previous MT run, …). Run this step after the others.
           AND NOT EXISTS (
               SELECT 1 FROM entries m
-              WHERE m.source = 'mt' AND m.source_lang = 'en' AND m.source_word = e.source_word
+              WHERE m.source_lang = 'en' AND m.target_lang = 'tr' AND m.source_word = e.source_word
           )
         GROUP BY e.source_word
         ORDER BY LENGTH(e.source_word)

@@ -110,7 +110,10 @@ def extract_pairs(originals: set[str], lower: dict[str, str], m2tr: dict[str, li
             tr_list = m2tr.get(meaning)
             if not tr_list:
                 continue
-            word = txt if txt in originals else lower.get(txt.lower())
+            # Prefer the lowercase common-noun headword: PanLex capitalizes UI/glossary strings
+            # ("Goldfish"), which would otherwise attach to a proper-noun headword of that spelling.
+            low = txt.lower()
+            word = low if low in originals else (txt if txt in originals else lower.get(low))
             if word is None:
                 continue
             for tr in tr_list:
@@ -135,6 +138,8 @@ def main() -> None:
     conn = sqlite3.connect(args.db)
     conn.execute("PRAGMA journal_mode = WAL")
     ensure_source_column(conn)
+    conn.execute("DELETE FROM entries WHERE source = 'panlex'")  # idempotent re-runs
+    conn.commit()
 
     print("Loading Turkish meaning map…")
     m2tr = load_meaning_to_turkish(TUR_TSV)

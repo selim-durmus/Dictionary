@@ -2,6 +2,7 @@ package com.selimdurmus.dictionary.data
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.util.Locale
 import kotlin.math.abs
 
 class EntryDao(private val dictionary: DictionaryDb) {
@@ -28,6 +29,10 @@ class EntryDao(private val dictionary: DictionaryDb) {
         // rows. If the user typed exactly one of those headwords AND it has no real-meaning
         // senses, follow the redirect to X and surface it via the suggestion banner.
         followRedirect(cleaned, fts)?.let { return@withContext it }
+
+        // Inflected forms (Turkish "kitabı", "gidiyorum"; English "went") usually have no meaning
+        // of their own — at most a grammar note. Resolve them to their lemma via the `forms` table.
+        lemmaFallback(cleaned, fts, filter)?.let { return@withContext it }
 
         val needsFuzzy = fts.size < FUZZY_TRIGGER && cleaned.length >= FUZZY_MIN_LEN
         if (!needsFuzzy) return@withContext SearchResults(fts)
@@ -56,6 +61,65 @@ class EntryDao(private val dictionary: DictionaryDb) {
         return SearchResults(targetEntries, suggestion = mostCommon)
     }
 
+    /**
+     * When the typed word has no real translation of its own (absent, or only "inflection of X"
+     * notes / a same-language definition), look it up in the `forms` table and show the first
+     * lemma that does have one. Explicit "form of" links win over inflection-table links, so
+     * "bana" resolves to "ben" rather than "ban".
+     */
+    private suspend fun lemmaFallback(
+        cleaned: String,
+        fts: List<Entry>,
+        filter: LangFilter,
+    ): SearchResults? {
+        if (!hasFormsTable) return null
+        val exact = fts.filter { it.sourceWord.equals(cleaned, ignoreCase = true) }
+        val ownMeaning = exact.any { it.isTranslation() && filter.matches(it) }
+        if (ownMeaning) {
+            // A word can be both: "children" has its own (rare) translation "sübyan" but is mainly
+            // the plural of "child". When it carries an inflection note, list the lemma's
+            // translations right after its own, without the "Form of" banner.
+            if (exact.none { it.category == INFLECTION_CATEGORY }) return null
+            val (lemma, lang) = lemmasFor(cleaned).firstOrNull() ?: return null
+            val lemmaEntries = entriesFor(lemma, lang).filter { filter.matches(it) && it.isTranslation() }
+            if (lemmaEntries.isEmpty()) return null
+            val own = fts.takeWhile { it.sourceWord.equals(cleaned, ignoreCase = true) }
+            val shown = (own + lemmaEntries).mapTo(HashSet()) { it.id }
+            return SearchResults(own + lemmaEntries + fts.filter { it.id !in shown })
+        }
+        for ((lemma, lang) in lemmasFor(cleaned)) {
+            val entries = entriesFor(lemma, lang).filter { filter.matches(it) }
+            if (entries.none { it.isTranslation() }) continue
+            val ids = entries.mapTo(HashSet()) { it.id }
+            return SearchResults(entries + fts.filter { it.id !in ids }, suggestion = lemma, isLemma = true)
+        }
+        return null
+    }
+
+    private fun lemmasFor(word: String): List<Pair<String, String>> {
+        val out = ArrayList<Pair<String, String>>()
+        dictionary.raw().rawQuery(
+            """
+            SELECT lemma, lang FROM forms
+            WHERE (form = ? AND lang = 'tr') OR (form = ? AND lang = 'en')
+            ORDER BY explicit DESC
+            """.trimIndent(),
+            arrayOf(word.lowercase(TURKISH), word.lowercase(Locale.ROOT)),
+        ).use { c ->
+            while (c.moveToNext()) out += c.getString(0) to c.getString(1)
+        }
+        return out
+    }
+
+    private fun Entry.isTranslation(): Boolean =
+        targetLang != sourceLang && category != INFLECTION_CATEGORY
+
+    private fun LangFilter.matches(e: Entry): Boolean = when (this) {
+        LangFilter.ALL -> true
+        LangFilter.EN_TR -> e.sourceLang == "en" && e.targetLang == "tr"
+        LangFilter.TR_EN -> e.sourceLang == "tr" && e.targetLang == "en"
+    }
+
     private fun redirectTarget(targetWord: String): String? {
         val lower = targetWord.lowercase()
         val prefix = REDIRECT_PREFIXES.firstOrNull { lower.startsWith(it) } ?: return null
@@ -71,7 +135,8 @@ class EntryDao(private val dictionary: DictionaryDb) {
     suspend fun entriesFor(word: String, lang: String): List<Entry> = withContext(Dispatchers.IO) {
         query(
         """
-        SELECT id, source_word, source_lang, target_word, target_lang, pos, category, definition, sense_order
+        SELECT id, source_word, source_lang, target_word, target_lang, pos, category, definition, sense_order,
+               ${sourceCol("")}
         FROM entries
         WHERE source_word = ? AND source_lang = ?
         ORDER BY ${tierExpr("")}, category, sense_order
@@ -84,14 +149,14 @@ class EntryDao(private val dictionary: DictionaryDb) {
         val pattern = sanitizeFtsToken(cleaned) + "*"
         // Ranking, top to bottom:
         //   1. exact headword match (case-insensitive)
-        //   2. provenance tier — real Wiktionary translations, then Claude per-sense, then OPUS-MT,
-        //      then the same-language en→en gloss fallback (see tierExpr)
+        //   2. provenance tier — dictionary translations, then Claude per-sense, then PanLex, then
+        //      OPUS-MT, then same-language glosses / inflection notes (see tierExpr)
         //   3. shorter source words — closer length to the query usually means closer relevance
         //   4. language / category / sense for stable, deterministic order
         return query(
             """
             SELECT e.id, e.source_word, e.source_lang, e.target_word, e.target_lang,
-                   e.pos, e.category, e.definition, e.sense_order
+                   e.pos, e.category, e.definition, e.sense_order, ${sourceCol("e.")}
             FROM entries_fts f
             JOIN entries e ON e.id = f.rowid
             WHERE entries_fts MATCH ?${filter.entriesClause("e.")}
@@ -164,26 +229,40 @@ class EntryDao(private val dictionary: DictionaryDb) {
 
     /**
      * Ranking tier (lower sorts first), for cross-language rows by provenance:
-     *   0  real Wiktionary translations (source='wiktionary')
-     *   1  Claude per-sense machine translations (source='llm') — dictionary grade
-     *   2  OPUS-MT per-word machine translations (source='mt') — fallback
-     *   3  PanLex CC0 dictionary entries (source='panlex') — only fills genuine gaps; ranked
-     *      below MT so its noisier long-tail entries never override a Wiktionary/OPUS translation
-     *   4  same-language fallbacks: en→en glosses and Turkish→Turkish TDK definitions
-     *      (source='tdk'). For a Turkish headword these rank just below any tr→en translation, so
-     *      the Turkish meaning surfaces when there's no English one (see ingest_tdk.py).
+     *   0  direct Wiktionary translations (source='wiktionary')
+     *   1  other dictionary data: Wiktionary pairs read backwards (source='wiktionary-rev') and
+     *      the Turkish Wiktionary edition (source='trwiktionary')
+     *   2  Claude per-sense machine translations (source='llm')
+     *   3  PanLex CC0 dictionary entries (source='panlex') — real dictionary data but noisy
+     *   4  OPUS-MT per-word machine translations (source='mt') — last resort; context-free and
+     *      often wrong, so it sits below every dictionary source
+     *   5  same-language fallbacks (en→en glosses, Turkish→Turkish TDK definitions) and
+     *      inflection notes ("definite accusative singular of kitap", category 'Inflection')
      *
      * Older DBs (shipped before the MT pass) have no `source` column; there we collapse to the
      * original two-tier split so the query still runs instead of erroring on a missing column.
      */
-    private fun tierExpr(prefix: String): String =
-        if (hasSourceColumn)
-            "CASE WHEN ${prefix}target_lang != ${prefix}source_lang AND ${prefix}source = 'wiktionary' THEN 0 " +
-                "WHEN ${prefix}target_lang != ${prefix}source_lang AND ${prefix}source = 'llm' THEN 1 " +
-                "WHEN ${prefix}target_lang != ${prefix}source_lang AND ${prefix}source = 'mt' THEN 2 " +
-                "WHEN ${prefix}target_lang != ${prefix}source_lang THEN 3 ELSE 4 END"
+    private fun tierExpr(prefix: String): String {
+        val cross = "${prefix}target_lang != ${prefix}source_lang AND ${prefix}category != '$INFLECTION_CATEGORY'"
+        return if (hasSourceColumn)
+            "CASE WHEN $cross AND ${prefix}source = 'wiktionary' THEN 0 " +
+                "WHEN $cross AND ${prefix}source IN ('wiktionary-rev', 'trwiktionary') THEN 1 " +
+                "WHEN $cross AND ${prefix}source = 'llm' THEN 2 " +
+                "WHEN $cross AND ${prefix}source = 'panlex' THEN 3 " +
+                "WHEN $cross AND ${prefix}source = 'mt' THEN 4 ELSE 5 END"
         else
-            "CASE WHEN ${prefix}target_lang != ${prefix}source_lang THEN 0 ELSE 4 END"
+            "CASE WHEN $cross THEN 0 ELSE 5 END"
+    }
+
+    /** The provenance column, or a constant on DBs that predate it. */
+    private fun sourceCol(prefix: String): String =
+        if (hasSourceColumn) "${prefix}source" else "'wiktionary'"
+
+    private val hasFormsTable: Boolean by lazy {
+        dictionary.raw().rawQuery(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'forms'", null,
+        ).use { it.moveToFirst() }
+    }
 
     private val hasSourceColumn: Boolean by lazy {
         dictionary.raw().rawQuery("PRAGMA table_info(entries)", null).use { c ->
@@ -217,6 +296,7 @@ class EntryDao(private val dictionary: DictionaryDb) {
                     category = c.getString(6),
                     definition = c.getStringOrNull(7),
                     senseOrder = c.getInt(8),
+                    source = c.getString(9),
                 )
             }
         }
@@ -266,6 +346,10 @@ class EntryDao(private val dictionary: DictionaryDb) {
     }
 
     companion object {
+        /** Category the data pipeline gives grammar-note senses (sources/parse.py INFLECTION). */
+        private const val INFLECTION_CATEGORY = "Inflection"
+        private val TURKISH = Locale.forLanguageTag("tr")
+
         private const val FUZZY_TRIGGER = 5
         private const val FUZZY_MIN_LEN = 4
         private const val FUZZY_MAX_DISTANCE = 2

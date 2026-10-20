@@ -2,11 +2,12 @@ package com.selimdurmus.dictionary.data
 
 /**
  * Wraps a search response so the UI can tell apart exact-prefix hits from fuzzy corrections.
- * [suggestion] is non-null only when the FTS prefix scan returned zero rows and the fuzzy
- * fallback produced something — in that case it carries the top corrected headword so the UI
- * can render a "Did you mean" banner.
+ * [suggestion] is non-null when the shown entries belong to a different headword than the one
+ * typed: a fuzzy correction or redirect ("Showing results for X"), or — when [isLemma] is true —
+ * the lemma an inflected form was resolved to ("kitabı" → "kitap").
  */
 data class SearchResults(
     val entries: List<Entry>,
     val suggestion: String? = null,
+    val isLemma: Boolean = false,
 )

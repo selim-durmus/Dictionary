@@ -10,4 +10,15 @@ data class Entry(
     val category: String,
     val definition: String?,
     val senseOrder: Int,
-)
+    /** Provenance tag from the data pipeline: wiktionary, wiktionary-rev, trwiktionary, tdk, panlex, llm, mt. */
+    val source: String = "wiktionary",
+) {
+    /** Short label for rows that aren't hand-written dictionary data, so guesses are visible. */
+    val sourceLabel: String?
+        get() = when (source) {
+            "mt" -> "machine translation"
+            "llm" -> "AI translation"
+            "panlex" -> "PanLex"
+            else -> null
+        }
+}

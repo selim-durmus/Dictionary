@@ -143,7 +143,8 @@ private fun SenseRow(entry: Entry) {
             )
             CategoryChip(entry.category)
         }
-        val meta = listOfNotNull(entry.pos, entry.targetLang.uppercase()).joinToString(" · ")
+        val meta = listOfNotNull(entry.pos, entry.targetLang.uppercase(), entry.sourceLabel)
+            .joinToString(" · ")
         if (meta.isNotEmpty()) {
             Text(
                 text = meta,

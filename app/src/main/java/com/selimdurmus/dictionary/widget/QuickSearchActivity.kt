@@ -163,7 +163,7 @@ private fun QuickSearchDialog(repository: DictionaryRepository, onDismiss: () ->
 
                 results.suggestion?.let { word ->
                     val banner = buildAnnotatedString {
-                        append("Showing results for ")
+                        append(if (results.isLemma) "Form of " else "Showing results for ")
                         withStyle(SpanStyle(color = Gold)) { append(word) }
                     }
                     Text(
@@ -214,7 +214,7 @@ private fun TopResult(entry: Entry, onClick: () -> Unit, modifier: Modifier = Mo
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
-        val meta = listOfNotNull(entry.pos, entry.category).joinToString(" · ")
+        val meta = listOfNotNull(entry.pos, entry.category, entry.sourceLabel).joinToString(" · ")
         if (meta.isNotEmpty()) {
             Text(
                 text = meta,

@@ -8,7 +8,12 @@ English and Turkish headwords, glosses, and translations are derived from
 [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) and the
 [GNU Free Documentation License](https://www.gnu.org/licenses/fdl-1.3.html).
 
-## Turkish→Turkish definitions — TDK Güncel Türkçe Sözlük
+This covers both the English edition (en.wiktionary.org, `source = 'wiktionary'`) and the Turkish
+edition (tr.wiktionary.org, [kaikki.org/trwiktionary](https://kaikki.org/trwiktionary/),
+`source = 'trwiktionary'`, ingested by `ingest_trwiktionary.py`). Rows marked
+`source = 'wiktionary-rev'` are the same Wiktionary pairs read in the opposite direction
+(`derive_reverse.py`), and the `forms` table (inflected form → lemma, `ingest_forms.py`) is derived
+from the inflection tables and form-of senses of both editions.
 
 Turkish-language definitions marked `source = 'tdk'` (Turkish headword → Turkish meaning) are
 derived from the **Güncel Türkçe Sözlük** of the Turkish Language Association (Türk Dil Kurumu,

@@ -9,6 +9,11 @@ from tqdm import tqdm
 
 KAIKKI_TURKISH_URL = "https://kaikki.org/dictionary/Turkish/kaikki.org-dictionary-Turkish.jsonl"
 KAIKKI_ENGLISH_URL = "https://kaikki.org/dictionary/English/kaikki.org-dictionary-English.jsonl"
+# Turkish-language Wiktionary edition (tr.wiktionary.org), all languages, gzipped (~45 MB):
+# English words defined in Turkish + Turkish words with English translation tables.
+KAIKKI_TRWIKTIONARY_URL = "https://kaikki.org/trwiktionary/raw-wiktextract-data.jsonl.gz"
+# OpenSubtitles word-frequency lists (hermitdave/FrequencyWords) — coverage testing only, not shipped.
+FREQ_URL = "https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/content/2018/{lang}/{lang}_50k.txt"
 
 
 def _context(insecure: bool) -> ssl.SSLContext | None:
@@ -56,3 +61,13 @@ def fetch_turkish(cache_dir: Path, *, force: bool = False, insecure: bool = Fals
 def fetch_english(cache_dir: Path, *, force: bool = False, insecure: bool = False) -> Path:
     return download(KAIKKI_ENGLISH_URL, cache_dir / "kaikki-english.jsonl",
                     force=force, insecure=insecure)
+
+
+def fetch_trwiktionary(cache_dir: Path, *, force: bool = False, insecure: bool = False) -> Path:
+    return download(KAIKKI_TRWIKTIONARY_URL, cache_dir / "trwiktionary.jsonl.gz",
+                    force=force, insecure=insecure)
+
+
+def fetch_freq(cache_dir: Path, lang: str, *, insecure: bool = False) -> Path:
+    return download(FREQ_URL.format(lang=lang), cache_dir / "freq" / f"{lang}_50k.txt",
+                    insecure=insecure)

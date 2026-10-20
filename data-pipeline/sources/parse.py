@@ -71,6 +71,17 @@ def _collect_tags(sense: dict) -> list[str]:
     return tags
 
 
+# Category for senses that only point at another headword ("definite accusative singular of
+# kitap", "simple past of go", "alternative form of vallahi"). The app treats these rows as notes,
+# not meanings, and redirects the lookup to the lemma via the `forms` table (ingest_forms.py).
+INFLECTION = "Inflection"
+
+
+def is_form_of(sense: dict) -> bool:
+    tags = sense.get("tags") or []
+    return bool(sense.get("form_of") or sense.get("alt_of")) or "form-of" in tags or "alt-of" in tags
+
+
 def parse_turkish(jsonl_path: Path) -> Iterator[Row]:
     """Turkish headwords with English glosses (tr→en rows)."""
     for entry in _iter_jsonl(jsonl_path, desc="parse tr"):
@@ -82,7 +93,7 @@ def parse_turkish(jsonl_path: Path) -> Iterator[Row]:
         for order, sense in enumerate(senses):
             glosses = sense.get("glosses") or []
             tags = _collect_tags(sense)
-            category = categorize(tags)
+            category = INFLECTION if is_form_of(sense) else categorize(tags)
             for gloss in glosses:
                 if not isinstance(gloss, str) or not gloss.strip():
                     continue
@@ -118,7 +129,7 @@ def parse_english(jsonl_path: Path) -> Iterator[Row]:
         senses = entry.get("senses") or []
         for sense_idx, sense in enumerate(senses):
             sense_tags = _collect_tags(sense)
-            sense_category = categorize(sense_tags)
+            sense_category = INFLECTION if is_form_of(sense) else categorize(sense_tags)
 
             sense_had_tr = False
             for tr in sense.get("translations") or []:
