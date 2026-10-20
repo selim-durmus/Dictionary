@@ -29,7 +29,7 @@ from pathlib import Path
 HERE = Path(__file__).parent
 DEFAULT_DB = HERE / "build" / "dictionary.db"
 WORK = HERE / "build" / "llm_agent"
-CHUNK = 500
+CHUNK = 500  # senses per chunk file; override with --chunk
 GAP_STATUSES = {"panlex", "mt", "definition_only", "lemma:panlex", "lemma:mt"}
 
 PROMPT_EN = """You are an English→Turkish lexicographer filling gaps in a personal offline dictionary.
@@ -42,7 +42,7 @@ Task: for every line, give the best Turkish translation of the HEADWORD in THAT 
 Output: write {out} — exactly one JSON object per input line, same order, UTF-8, real Turkish characters (ç ğ ı ö ş ü İ), no markdown:
 {{"i": <same i>, "tr": "<turkish or null>", "alts": ["...", "..."]}}
 
-Work through the whole file; do not skip lines and do not write any script — translate them yourself. Read the input in pieces if needed and write the output with the Write tool (you may write it in a few appended parts if it is long, but the final file must contain every input line). When done, reply only with the number of lines written."""
+Work through the whole file; do not skip lines and do not write any script — translate them yourself. Read the input in pieces if needed and write the output with the Write tool (you may write it in a few appended parts if it is long, but the final file must contain every input line). Other agents work in parallel and share your scratch folder, so name any temporary part files after this chunk (e.g. {name}_part1.jsonl). When done, reply only with the number of lines written."""
 
 PROMPT_TR = """You are a Turkish→English lexicographer filling gaps in a personal offline dictionary.
 
@@ -54,7 +54,7 @@ Task: for every line, give the best English translation of the HEADWORD in THAT 
 Output: write {out} — exactly one JSON object per input line, same order, UTF-8, no markdown:
 {{"i": <same i>, "en": "<english>", "alts": ["...", "..."]}}
 
-Work through the whole file; do not skip lines and do not write any script — translate them yourself. Read the input in pieces if needed and write the output with the Write tool (you may write it in a few appended parts if it is long, but the final file must contain every input line). When done, reply only with the number of lines written."""
+Work through the whole file; do not skip lines and do not write any script — translate them yourself. Read the input in pieces if needed and write the output with the Write tool (you may write it in a few appended parts if it is long, but the final file must contain every input line). Other agents work in parallel and share your scratch folder, so name any temporary part files after this chunk (e.g. {name}_part1.jsonl). When done, reply only with the number of lines written."""
 
 INSERT = (
     "INSERT OR IGNORE INTO entries "
@@ -188,6 +188,7 @@ def ingest(conn: sqlite3.Connection) -> None:
 
 
 def main() -> None:
+    global CHUNK
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd", choices=["export", "export-tdk", "ingest", "prompt"])
     ap.add_argument("name", nargs="?")
@@ -195,13 +196,16 @@ def main() -> None:
     ap.add_argument("--top", type=int, default=20000)
     ap.add_argument("--senses", type=int, default=2)
     ap.add_argument("--limit", type=int, default=2000)
+    ap.add_argument("--chunk", type=int, default=CHUNK, help="Senses per chunk file.")
     args = ap.parse_args()
 
     if args.cmd == "prompt":
         inp = WORK / f"{args.name}.jsonl"
         tmpl = PROMPT_TR if args.name.startswith("tdk") else PROMPT_EN
-        print(tmpl.format(inp=inp.resolve(), out=inp.with_name(f"{args.name}.out.jsonl").resolve()))
+        print(tmpl.format(inp=inp.resolve(), out=inp.with_name(f"{args.name}.out.jsonl").resolve(),
+                          name=args.name))
         return
+    CHUNK = args.chunk
     conn = sqlite3.connect(args.db)
     if args.cmd == "export":
         export_en(conn, args.top, args.senses)
