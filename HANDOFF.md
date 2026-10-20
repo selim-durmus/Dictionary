@@ -46,7 +46,9 @@ Still open (in priority order):
 1. **Turkish forms Wiktionary has no table for** (`gerektiğini`, `yaptığını`, `kendini`): ~14–28% of TR words in the 1K–50K bands. Use Zemberek (Apache-2.0) at build time over a large Turkish word list to extend `forms`.
 2. **Per-sense quality via Claude** — no API key (Pro plan), so it runs as Haiku subagents inside Claude Code with `llm_agent_batches.py` (`export` → one Haiku agent per 500-sense chunk using the prompt from `llm_agent_batches.py prompt <chunk>` → `ingest`). Rows are `source='llm'`, labelled "AI translation" in the app.
    - Done 2026-10-19: top-20K English words whose best translation was PanLex/MT/definition-only → 4,571 words, 5,786 senses (first 2 each), 12 parallel agents, ~7 min. Cost: 5-hour meter +15%, weekly +2%. Also ingested the 2,000-sense pilot (`build/llm_pilot/`, incl. 500 TDK tr→en senses).
-   - Next: `export --top 50000` (≈9K more words), and `export-tdk` for the ~69K TDK headwords with no English (≈81K senses ≈ 2.5 five-hour windows, ≈30% weekly). TDK→EN quality in the pilot was excellent.
+   - 2026-10-20 00:47–01:20: all English top-50K gap chunks (en_001–en_043, ~21K senses) and TDK chunks tdk_001–tdk_018 (18K of 80.7K senses, 1,000 per chunk) done → 94,573 llm rows. Cost of that window: 5-hour 0→90%, weekly 22→34%. EN→TR "any" for ranks 20K–50K 68.6→73.3%; Turkish words with only a Turkish definition 1.6→0.1%.
+   - Remaining: tdk_019–tdk_081 (63 chunks). A session-only cron runs them after each 5-hour reset (~25 chunks per window, stops at 85% / weekly 70%), then ingests and rebuilds. To resume by hand: pending = `build/llm_agent/*.jsonl` without a full `.out.jsonl`; launch Haiku agents with `python -m llm_agent_batches prompt <chunk>`; then `ingest`, `ingest_forms`, `coverage_report`.
+   - Agents share a scratch folder; prompts now tell them to name part files after their chunk. Validate outputs (same `i` set as input, right key) before `ingest`.
 3. DB size: 684 MB before MT (the Turkish `forms` links are ~2.3M rows). Frequency-filtering forms or opening the asset in place (requery/sqlite-android) would cut the on-device footprint.
 
 ## How to resume in a new chat
