@@ -31,6 +31,17 @@ What changed (all $0, offline at runtime):
 - **OPUS-MT demoted**: runs last, only for single words with no Turkish from any source, no `--prune` (the English gloss stays), ranked below PanLex. Pilot showed idioms rendered literally (piece of cake → kek parçası), collapsed polysemy (match → maç only) and confident errors (hassle → leylek).
 - **App**: `Entry.source` + a visible label for machine translation / AI / PanLex rows; tier order dictionary > reverse/trwiktionary > llm > panlex > mt > same-language/inflection notes. `versionCode` 5 so installs re-copy the DB.
 
+After OPUS-MT (residual 528K words → 258,772 kept) and the first 12,000 Haiku senses (top-50K words, chunks en_001–en_024 + pilot), 2026-10-20:
+
+| | dictionary-grade | any translation |
+|---|---|---|
+| EN→TR top 1K / 1K–5K / 5K–20K / 20K–50K | 96.9 / 90.2 / 73.2 / 45.8% | 99.1 / 96.5 / 88.4 / 68.6% |
+| TR→EN same bands | 94.6 / 84.6 / 78.2 / 70.7% | 94.8 / 85.0 / 78.7 / 71.3% |
+
+DB 749 MB (debug APK 283 MB). Inflected words whose own translations are only guesses (MT/AI/PanLex) show their lemma's dictionary entries first ("went" → go → gitmek before MT "gitti").
+
+**Installing on the Pixel:** the phone has a debug build signed on the Mac; a debug build from the Windows PC has a different key, so `adb install -r` fails with INSTALL_FAILED_UPDATE_INCOMPATIBLE. Either build on the Mac, copy the Mac's `~/.android/debug.keystore` to the PC, or uninstall first (wipes Recents/Top 50).
+
 Still open (in priority order):
 1. **Turkish forms Wiktionary has no table for** (`gerektiğini`, `yaptığını`, `kendini`): ~14–28% of TR words in the 1K–50K bands. Use Zemberek (Apache-2.0) at build time over a large Turkish word list to extend `forms`.
 2. **Per-sense quality via Claude** — no API key (Pro plan), so it runs as Haiku subagents inside Claude Code with `llm_agent_batches.py` (`export` → one Haiku agent per 500-sense chunk using the prompt from `llm_agent_batches.py prompt <chunk>` → `ingest`). Rows are `source='llm'`, labelled "AI translation" in the app.

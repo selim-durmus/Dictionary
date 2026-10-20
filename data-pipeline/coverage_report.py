@@ -65,6 +65,7 @@ class Lookup:
         self.cross: dict[tuple, dict[str, list]] = defaultdict(lambda: defaultdict(list))
         self.same: set[tuple] = set()
         self.pos: dict[tuple, set] = defaultdict(set)
+        self.inflected: set[tuple] = set()
         for sw, sl, tw, tl, pos, cat, s in conn.execute(
             f"SELECT source_word, source_lang, target_word, target_lang, pos, category, {src} "
             "FROM entries ORDER BY sense_order"
@@ -75,6 +76,8 @@ class Lookup:
                 self.cross[key][tier_of(s)].append(tw)
             else:
                 self.same.add(key)
+            if cat == INFLECTION:
+                self.inflected.add(key)
         self.lemmas: dict[tuple, list[str]] = defaultdict(list)
         has_forms = conn.execute(
             "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'forms'").fetchone()
@@ -96,6 +99,14 @@ class Lookup:
     def resolve(self, word: str, lang: str) -> dict:
         key = (fold(word, lang), lang)
         hit = self.best(key)
+        if hit and hit[0] != "dictionary" and key in self.inflected:
+            # Mirrors EntryDao.lemmaFallback: an inflected form whose own translations are only
+            # guesses shows its lemma's entries first.
+            for lemma in self.lemmas.get(key, [])[:1]:
+                lhit = self.best((fold(lemma, lang), lang))
+                if lhit and lhit[0] == "dictionary":
+                    return {"word": word, "status": "lemma:dictionary", "via": lemma,
+                            "targets": lhit[1][:5]}
         if hit:
             return {"word": word, "status": hit[0], "via": None, "targets": hit[1][:5]}
         for lemma in self.lemmas.get(key, []):

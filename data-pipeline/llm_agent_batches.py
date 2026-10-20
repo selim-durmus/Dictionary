@@ -75,8 +75,18 @@ def write_chunks(prefix: str, rows: list[dict]) -> None:
 
 
 def done_keys(conn: sqlite3.Connection) -> set[tuple]:
-    return {(w, l, o) for w, l, o in conn.execute(
+    """Senses already translated (llm rows in the DB) or already exported to a chunk file,
+    so repeated exports only pick up new work."""
+    done = {(w, l, o) for w, l, o in conn.execute(
         "SELECT source_word, source_lang, sense_order FROM entries WHERE source = 'llm'")}
+    for path in WORK.glob("*.jsonl"):
+        if path.name.endswith(".out.jsonl"):
+            continue
+        lang = "tr" if path.name.startswith("tdk") else "en"
+        for line in open(path, encoding="utf-8"):
+            r = json.loads(line)
+            done.add((r["word"], lang, int(r.get("o", 0)) * 10))
+    return done
 
 
 def export_en(conn: sqlite3.Connection, top: int, senses: int) -> None:
@@ -121,6 +131,8 @@ def export_tdk(conn: sqlite3.Connection, limit: int) -> None:
         "AND NOT EXISTS (SELECT 1 FROM entries x WHERE x.source_word = t.source_word "
         "AND x.source_lang = 'tr' AND x.target_lang = 'en' AND x.category != 'Inflection')"
     ).fetchall()
+    done = done_keys(conn)
+    rows = [r for r in rows if (r[0], "tr", r[3] * 10) not in done]
     rows.sort(key=lambda r: (rank.get(r[0], 10**9), r[0], r[3]))
     out = [{"i": i, "word": w, "pos": p, "tanim": d[:300], "o": o}
            for i, (w, p, d, o) in enumerate(rows[:limit])]

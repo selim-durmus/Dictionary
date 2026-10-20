@@ -85,7 +85,12 @@ class EntryDao(private val dictionary: DictionaryDb) {
             if (lemmaEntries.isEmpty()) return null
             val own = fts.takeWhile { it.sourceWord.equals(cleaned, ignoreCase = true) }
             val shown = (own + lemmaEntries).mapTo(HashSet()) { it.id }
-            return SearchResults(own + lemmaEntries + fts.filter { it.id !in shown })
+            val rest = fts.filter { it.id !in shown }
+            // If the word's own translations are only guesses (MT/AI/PanLex), the lemma's
+            // dictionary entries are the better answer: "went" → "go → gitmek" before "gitti".
+            val ownIsGuess = own.filter { it.isTranslation() }.all { it.source in GUESS_SOURCES }
+            return if (ownIsGuess) SearchResults(lemmaEntries + own + rest, suggestion = lemma, isLemma = true)
+            else SearchResults(own + lemmaEntries + rest)
         }
         for ((lemma, lang) in lemmasFor(cleaned)) {
             val entries = entriesFor(lemma, lang).filter { filter.matches(it) }
@@ -349,6 +354,8 @@ class EntryDao(private val dictionary: DictionaryDb) {
         /** Category the data pipeline gives grammar-note senses (sources/parse.py INFLECTION). */
         private const val INFLECTION_CATEGORY = "Inflection"
         private val TURKISH = Locale.forLanguageTag("tr")
+        /** Provenance tags for machine-made or noisy rows (see tierExpr). */
+        private val GUESS_SOURCES = setOf("mt", "llm", "panlex")
 
         private const val FUZZY_TRIGGER = 5
         private const val FUZZY_MIN_LEN = 4
