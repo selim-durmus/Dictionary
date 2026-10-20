@@ -42,7 +42,7 @@ Task: for every line, give the best Turkish translation of the HEADWORD in THAT 
 Output: write {out} — exactly one JSON object per input line, same order, UTF-8, real Turkish characters (ç ğ ı ö ş ü İ), no markdown:
 {{"i": <same i>, "tr": "<turkish or null>", "alts": ["...", "..."]}}
 
-Work through the whole file; do not skip lines and do not write any script — translate them yourself. Read the input in pieces if needed and write the output with the Write tool (you may write it in a few appended parts if it is long, but the final file must contain every input line). Other agents work in parallel and share your scratch folder, so name any temporary part files after this chunk (e.g. {name}_part1.jsonl). When done, reply only with the number of lines written."""
+Work through the whole file; do not skip lines and do not write any script — translate them yourself. Read the input in pieces if needed and write the output with the Write tool (you may write it in a few appended parts if it is long, but the final file must contain every input line). Other agents work in parallel, so name any temporary part files after this chunk (e.g. {name}_part1.jsonl), keep them in your own scratchpad folder (never next to the input file), and delete them when done. When done, reply only with the number of lines written."""
 
 PROMPT_TR = """You are a Turkish→English lexicographer filling gaps in a personal offline dictionary.
 
@@ -54,7 +54,7 @@ Task: for every line, give the best English translation of the HEADWORD in THAT 
 Output: write {out} — exactly one JSON object per input line, same order, UTF-8, no markdown:
 {{"i": <same i>, "en": "<english>", "alts": ["...", "..."]}}
 
-Work through the whole file; do not skip lines and do not write any script — translate them yourself. Read the input in pieces if needed and write the output with the Write tool (you may write it in a few appended parts if it is long, but the final file must contain every input line). Other agents work in parallel and share your scratch folder, so name any temporary part files after this chunk (e.g. {name}_part1.jsonl). When done, reply only with the number of lines written."""
+Work through the whole file; do not skip lines and do not write any script — translate them yourself. Read the input in pieces if needed and write the output with the Write tool (you may write it in a few appended parts if it is long, but the final file must contain every input line). Other agents work in parallel, so name any temporary part files after this chunk (e.g. {name}_part1.jsonl), keep them in your own scratchpad folder (never next to the input file), and delete them when done. When done, reply only with the number of lines written."""
 
 INSERT = (
     "INSERT OR IGNORE INTO entries "
@@ -80,7 +80,7 @@ def done_keys(conn: sqlite3.Connection) -> set[tuple]:
     done = {(w, l, o) for w, l, o in conn.execute(
         "SELECT source_word, source_lang, sense_order FROM entries WHERE source = 'llm'")}
     for path in WORK.glob("*.jsonl"):
-        if path.name.endswith(".out.jsonl"):
+        if path.name.endswith(".out.jsonl") or "_part" in path.name:
             continue
         lang = "tr" if path.name.startswith("tdk") else "en"
         for line in open(path, encoding="utf-8"):
@@ -145,7 +145,7 @@ def ingest(conn: sqlite3.Connection) -> None:
 
     ensure_source_column(conn)
     total = 0
-    for out_path in sorted(WORK.glob("*.out.jsonl")) + sorted(
+    for out_path in sorted(p for p in WORK.glob("*.out.jsonl") if "_part" not in p.name) + sorted(
         (HERE / "build" / "llm_pilot").glob("*.out.jsonl")
     ):
         inp_path = out_path.with_name(out_path.name.replace(".out.jsonl", ".jsonl"))
@@ -174,7 +174,10 @@ def ingest(conn: sqlite3.Connection) -> None:
             order = int(r.get("o", 0)) * 10
             gloss = r.get("tanim") if to_en else r.get("gloss")
             for k, t in enumerate(dict.fromkeys(c for c in cands if c)):
-                if t.lower() == r["word"].lower():
+                # Skip echoes and agent placeholders ("[unknown plant]", "?", "N/A").
+                if t.lower() == r["word"].lower() or t.startswith(("[", "(?", "?")) \
+                        or t.lower() in {"n/a", "null", "none", "unknown"} \
+                        or "unverified" in t.lower():
                     continue
                 batch.append((r["word"], "tr" if to_en else "en", t, "en" if to_en else "tr",
                               r.get("pos"), gloss, order + k))
