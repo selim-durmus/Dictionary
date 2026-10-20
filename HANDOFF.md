@@ -33,7 +33,9 @@ What changed (all $0, offline at runtime):
 
 Still open (in priority order):
 1. **Turkish forms Wiktionary has no table for** (`gerektiğini`, `yaptığını`, `kendini`): ~14–28% of TR words in the 1K–50K bands. Use Zemberek (Apache-2.0) at build time over a large Turkish word list to extend `forms`.
-2. **Per-sense quality via Claude**: no API key (Pro plan), so run it with Haiku subagents in Claude Code. Pilot 2026-10-19: 2,000 senses in 4 parallel Haiku agents moved the 5-hour meter 36→43% and weekly 15→16%; output quality good, TR→EN from TDK definitions excellent. Target only words whose best translation is PanLex/definition-only (≈13K words in the top 50K, ≈4K in the top 20K), first 1–2 senses — the random-sense pilot showed most untranslated senses of common words are archaic.
+2. **Per-sense quality via Claude** — no API key (Pro plan), so it runs as Haiku subagents inside Claude Code with `llm_agent_batches.py` (`export` → one Haiku agent per 500-sense chunk using the prompt from `llm_agent_batches.py prompt <chunk>` → `ingest`). Rows are `source='llm'`, labelled "AI translation" in the app.
+   - Done 2026-10-19: top-20K English words whose best translation was PanLex/MT/definition-only → 4,571 words, 5,786 senses (first 2 each), 12 parallel agents, ~7 min. Cost: 5-hour meter +15%, weekly +2%. Also ingested the 2,000-sense pilot (`build/llm_pilot/`, incl. 500 TDK tr→en senses).
+   - Next: `export --top 50000` (≈9K more words), and `export-tdk` for the ~69K TDK headwords with no English (≈81K senses ≈ 2.5 five-hour windows, ≈30% weekly). TDK→EN quality in the pilot was excellent.
 3. DB size: 684 MB before MT (the Turkish `forms` links are ~2.3M rows). Frequency-filtering forms or opening the asset in place (requery/sqlite-android) would cut the on-device footprint.
 
 ## How to resume in a new chat
