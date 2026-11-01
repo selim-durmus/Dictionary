@@ -92,26 +92,32 @@ class EntryDao(private val dictionary: DictionaryDb) {
             return if (ownIsGuess) SearchResults(lemmaEntries + own + rest, suggestion = lemma, isLemma = true)
             else SearchResults(own + lemmaEntries + rest)
         }
-        for ((lemma, lang) in lemmasFor(cleaned)) {
+        for ((lemma, lang, explicit) in lemmasFor(cleaned)) {
             val entries = entriesFor(lemma, lang).filter { filter.matches(it) }
             if (entries.none { it.isTranslation() }) continue
             val ids = entries.mapTo(HashSet()) { it.id }
-            return SearchResults(entries + fts.filter { it.id !in ids }, suggestion = lemma, isLemma = true)
+            // Misspelling links (nasil → nasıl) read as "Showing results for", not "is a form of".
+            return SearchResults(
+                entries + fts.filter { it.id !in ids },
+                suggestion = lemma,
+                isLemma = explicit != SPELLING_LINK,
+            )
         }
         return null
     }
 
-    private fun lemmasFor(word: String): List<Pair<String, String>> {
-        val out = ArrayList<Pair<String, String>>()
+    /** (lemma, lang, explicit) links for a typed word, best first (see ingest_forms.py). */
+    private fun lemmasFor(word: String): List<Triple<String, String, Int>> {
+        val out = ArrayList<Triple<String, String, Int>>()
         dictionary.raw().rawQuery(
             """
-            SELECT lemma, lang FROM forms
+            SELECT lemma, lang, explicit FROM forms
             WHERE (form = ? AND lang = 'tr') OR (form = ? AND lang = 'en')
             ORDER BY explicit DESC
             """.trimIndent(),
             arrayOf(word.lowercase(TURKISH), word.lowercase(Locale.ROOT)),
         ).use { c ->
-            while (c.moveToNext()) out += c.getString(0) to c.getString(1)
+            while (c.moveToNext()) out += Triple(c.getString(0), c.getString(1), c.getInt(2))
         }
         return out
     }
@@ -356,6 +362,8 @@ class EntryDao(private val dictionary: DictionaryDb) {
         private val TURKISH = Locale.forLanguageTag("tr")
         /** Provenance tags for machine-made or noisy rows (see tierExpr). */
         private val GUESS_SOURCES = setOf("mt", "llm", "panlex")
+        /** forms.explicit value for misspelling links (data-pipeline/ingest_spelling.py). */
+        private const val SPELLING_LINK = -2
 
         private const val FUZZY_TRIGGER = 5
         private const val FUZZY_MIN_LEN = 4
