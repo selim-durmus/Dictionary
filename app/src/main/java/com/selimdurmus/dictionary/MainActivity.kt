@@ -5,7 +5,6 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,10 +23,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.selimdurmus.dictionary.ui.EntryTarget
-import com.selimdurmus.dictionary.ui.HomePager
-import com.selimdurmus.dictionary.ui.theme.Background
-import com.selimdurmus.dictionary.ui.theme.Gold
-import com.selimdurmus.dictionary.ui.theme.TranslateTheme
+import com.selimdurmus.dictionary.ui.DictionaryApp
+import com.selimdurmus.dictionary.ui.theme.DictionaryTheme
 
 class MainActivity : ComponentActivity() {
 
@@ -43,10 +40,10 @@ class MainActivity : ComponentActivity() {
         pendingTarget = targetFromIntent(intent)
 
         setContent {
-            TranslateTheme {
+            DictionaryTheme {
                 Surface(
-                    modifier = Modifier.fillMaxSize().background(Background),
-                    color = Background,
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.surface,
                 ) {
                     // First launch (or after an app update) copies the bundled DB out of assets;
                     // that's hundreds of MB, so do it off the main thread behind a loading screen
@@ -60,7 +57,7 @@ class MainActivity : ComponentActivity() {
                     }
 
                     if (ready) {
-                        HomePager(
+                        DictionaryApp(
                             repository = container.repository,
                             initialTarget = pendingTarget,
                             onTargetConsumed = { pendingTarget = null },
@@ -99,10 +96,17 @@ private fun LoadingScreen() {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Text(text = "Dictionary", style = MaterialTheme.typography.titleLarge, color = Gold)
-        CircularProgressIndicator(
-            color = Gold,
-            modifier = Modifier.padding(top = 24.dp),
+        Text(
+            text = "Dictionary",
+            style = MaterialTheme.typography.headlineMedium,
+            color = MaterialTheme.colorScheme.onSurface,
         )
+        Text(
+            text = "Preparing the word list…",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+        CircularProgressIndicator(modifier = Modifier.padding(top = 24.dp))
     }
 }

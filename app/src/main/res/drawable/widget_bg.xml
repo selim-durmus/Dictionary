@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Pure black tile, no stroke. -->
+<!-- Pre-Android 12 fallback: soft teal pill. -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
-    <solid android:color="#000000" />
+    <solid android:color="#CCE8E7" />
+    <corners android:radius="28dp" />
 </shape>

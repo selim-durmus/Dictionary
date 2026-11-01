@@ -17,6 +17,7 @@ class AppContainer(private val appContext: Context) {
             entries = EntryDao(dictionary),
             recents = userDb.recents(),
             stats = userDb.stats(),
+            favorites = userDb.favorites(),
         )
     }
 
