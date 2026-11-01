@@ -1,28 +1,39 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-  Monochrome variant for Android 13+ themed icons. The system tints the alpha channel with the
-  user's accent — color is ignored, only alpha matters. The whole book is one evenOdd path: the
-  two pages are the filled silhouette, and the spine slit + six text lines are punched out as
-  cutouts, so they read as the launcher's negative space on the tinted book.
-
-  Mirrors the foreground shape. Keep geometry inside the ~66dp safe circle of the 108dp viewport.
--->
+<!-- Themed-icon layer (Android 13+): both bubbles as outlines with their letters; the back
+     bubble is clipped short of the front one so the outlines never cross. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-
+    <group>
+        <clip-path android:pathData="M0,0H108V45H52V108H0Z" />
+        <path
+            android:strokeColor="#FF000000"
+            android:strokeWidth="3"
+            android:strokeLineJoin="round"
+            android:pathData="M36,31h16a8,8 0,0 1,8,8v10a8,8 0,0 1,-8,8h-14l-6,6v-6.4a8,8 0,0 1,-4,-6.9v-10.7a8,8 0,0 1,8,-8z" />
+        <path
+            android:strokeColor="#FF000000"
+            android:strokeWidth="3.6"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:pathData="M37.5,51 L44,36.5 L50.5,51 M40.2,45.4 L47.8,45.4" />
+    </group>
     <path
-        android:fillColor="#FFFFFF"
-        android:fillType="evenOdd"
-        android:pathData="M54,45 C45,40 34,38.5 23,41 L23,67 C34,64.5 45,66 54,71 Z
-                          M54,45 C63,40 74,38.5 85,41 L85,67 C74,64.5 63,66 54,71 Z
-                          M53.2,45.5 L54.8,45.5 L54.8,70.5 L53.2,70.5 Z
-                          M29,49.5 L47,51.5 L47,53 L29,51 Z
-                          M29,55.5 L45,57.5 L45,59 L29,57 Z
-                          M29,61.5 L43,63.5 L43,65 L29,63 Z
-                          M79,49.5 L61,51.5 L61,53 L79,51 Z
-                          M79,55.5 L63,57.5 L63,59 L79,57 Z
-                          M79,61.5 L65,63.5 L65,65 L79,63 Z" />
+        android:strokeColor="#FF000000"
+        android:strokeWidth="3"
+        android:strokeLineJoin="round"
+        android:pathData="M56,49h16a8,8 0,0 1,8,8v12a8,8 0,0 1,-8,8h-14l-6,5.5v-6a8,8 0,0 1,-4,-6.9v-12.6a8,8 0,0 1,8,-8z" />
+    <path
+        android:strokeColor="#FF000000"
+        android:strokeWidth="3.6"
+        android:strokeLineCap="round"
+        android:pathData="M68.6,57.8 A7,7 0,1 0,68.6 68.2" />
+    <path
+        android:strokeColor="#FF000000"
+        android:strokeWidth="2.4"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M64,70.2 L64,72.2 Q67,72.4 66.3,74.4 Q65.4,76 62.4,75.4" />
 </vector>

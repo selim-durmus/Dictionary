@@ -1,36 +1,34 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-  Open-book mark, perfectly symmetric about the vertical center (x=54). Gold pages on the black
-  adaptive background, a darker fold at the spine, and three text lines per page that tilt toward
-  the fold. All geometry stays inside the ~66dp safe circle (center 54,54; every corner within
-  radius ≈34), so no mask shape clips it.
--->
+<!-- Two overlapping speech bubbles: "A" (English) behind, "Ç" (Turkish) in front.
+     Everything stays inside the 66dp adaptive-icon safe circle. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-
-    <!-- Left page -->
+    <!-- back bubble (English) -->
     <path
-        android:fillColor="#D4B062"
-        android:pathData="M54,45 C45,40 34,38.5 23,41 L23,67 C34,64.5 45,66 54,71 Z" />
-    <!-- Right page (mirror of the left about x=54) -->
+        android:fillColor="#9CF1F0"
+        android:pathData="M36,31h16a8,8 0,0 1,8,8v10a8,8 0,0 1,-8,8h-14l-6,6v-6.4a8,8 0,0 1,-4,-6.9v-10.7a8,8 0,0 1,8,-8z" />
     <path
-        android:fillColor="#D4B062"
-        android:pathData="M54,45 C63,40 74,38.5 85,41 L85,67 C74,64.5 63,66 54,71 Z" />
-
-    <!-- Spine fold -->
+        android:strokeColor="#004F4F"
+        android:strokeWidth="3.6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M37.5,51 L44,36.5 L50.5,51 M40.2,45.4 L47.8,45.4" />
+    <!-- front bubble (Turkish) -->
     <path
-        android:fillColor="#A07C38"
-        android:pathData="M52.5,44.5 L55.5,44.5 L55.5,71.5 L52.5,71.5 Z" />
-
-    <!-- Text lines — left page -->
-    <path android:fillColor="#4A3A1C" android:pathData="M29,49.5 L47,51.5 L47,53 L29,51 Z" />
-    <path android:fillColor="#4A3A1C" android:pathData="M29,55.5 L45,57.5 L45,59 L29,57 Z" />
-    <path android:fillColor="#4A3A1C" android:pathData="M29,61.5 L43,63.5 L43,65 L29,63 Z" />
-    <!-- Text lines — right page (mirrored) -->
-    <path android:fillColor="#4A3A1C" android:pathData="M79,49.5 L61,51.5 L61,53 L79,51 Z" />
-    <path android:fillColor="#4A3A1C" android:pathData="M79,55.5 L63,57.5 L63,59 L79,57 Z" />
-    <path android:fillColor="#4A3A1C" android:pathData="M79,61.5 L65,63.5 L65,65 L79,63 Z" />
+        android:fillColor="#FFFFFF"
+        android:pathData="M56,49h16a8,8 0,0 1,8,8v12a8,8 0,0 1,-8,8h-14l-6,5.5v-6a8,8 0,0 1,-4,-6.9v-12.6a8,8 0,0 1,8,-8z" />
+    <path
+        android:strokeColor="#006A6A"
+        android:strokeWidth="3.6"
+        android:strokeLineCap="round"
+        android:pathData="M68.6,57.8 A7,7 0,1 0,68.6 68.2" />
+    <path
+        android:strokeColor="#006A6A"
+        android:strokeWidth="2.4"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M64,70.2 L64,72.2 Q67,72.4 66.3,74.4 Q65.4,76 62.4,75.4" />
 </vector>
