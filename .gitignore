@@ -38,3 +38,7 @@ app/src/main/assets/dictionary.db
 # --- OS junk ---
 Thumbs.db
 ehthumbs.db
+
+# Zemberek analyzer build output (data-pipeline/zemberek)
+data-pipeline/zemberek/build/
+data-pipeline/zemberek/.gradle/

@@ -138,6 +138,9 @@ form_flags=()
 [[ $include_en -eq 0 ]] && form_flags+=(--no-english)
 "${py[@]}" -m ingest_forms "${form_flags[@]}"
 
+echo "==> Adding Turkish forms Wiktionary lacks (ingest_zemberek; needs Java 17)"
+"${py[@]}" -m ingest_zemberek
+
 src="$repo_root/data-pipeline/build/dictionary.db"
 dest="$repo_root/app/src/main/assets/dictionary.db"
 if [[ ! -f $src ]]; then

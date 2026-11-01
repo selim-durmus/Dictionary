@@ -47,7 +47,16 @@ DB 749 MB (debug APK 283 MB). Inflected words whose own translations are only gu
 **Installing on the Pixel:** the phone has a debug build signed on the Mac; a debug build from the Windows PC has a different key, so `adb install -r` fails with INSTALL_FAILED_UPDATE_INCOMPATIBLE. Either build on the Mac, copy the Mac's `~/.android/debug.keystore` to the PC, or uninstall first (wipes Recents/Top 50).
 
 Still open (in priority order):
-1. **Turkish forms Wiktionary has no table for** (`gerektiğini`, `yaptığını`, `kendini`): ~14–28% of TR words in the 1K–50K bands. Use Zemberek (Apache-2.0) at build time over a large Turkish word list to extend `forms`.
+1. ~~**Turkish forms Wiktionary has no table for**~~ — done 2026-11-01 with Zemberek, shipped as 2.0.3 (versionCode 10). `data-pipeline/zemberek/` is a standalone Gradle tool (zemberek-morphology 0.17.1 from the author's GitHub Maven repo, Java 17) and `ingest_zemberek.py` runs it after `ingest_forms`. It takes every word with ≥3 hits in the full OpenSubtitles list (`cache/freq/tr_full.txt`), keeps 428K that have no translation or form link, and links 214K of them to one translatable lemma (`explicit = -1`, so Wiktionary links win). It runs in ~25 s and adds ~7 MB. Informal spellings fall back to Zemberek's informal mode (geliyom → gelmek). In a 60-link sample, ~58 were right.
+
+   | TR→EN | before | after Zemberek (dictionary / any) | absent |
+   |---|---|---|---|
+   | top 1K | 94.3 / 95.2% | 97.2 / 98.1% | 4.7 → 1.8% |
+   | 1K–5K | 84.1 / 85.8% | 90.0 / 92.0% | 14.2 → 7.9% |
+   | 5K–20K | 77.4 / 80.1% | 85.5 / 88.7% | 19.9 → 11.3% |
+   | 20K–50K | 69.9 / 73.5% | 81.7 / 86.6% | 26.4 → 13.3% |
+
+   What's still "absent" in the common bands is mostly not Turkish vocabulary: English names in subtitles (john, charlie), apostrophe-split suffixes (nin, daki), fillers (ee, uh) and misspellings (birşeyler, hoşçakal, nasıi). A small spelling-variant map would catch the last group.
 2. **Per-sense quality via Claude** — no API key (Pro plan), so it runs as Haiku subagents inside Claude Code with `llm_agent_batches.py` (`export` → one Haiku agent per 500-sense chunk using the prompt from `llm_agent_batches.py prompt <chunk>` → `ingest`). Rows are `source='llm'`, labelled "AI translation" in the app.
    - Done 2026-10-19: top-20K English words whose best translation was PanLex/MT/definition-only → 4,571 words, 5,786 senses (first 2 each), 12 parallel agents, ~7 min. Cost: 5-hour meter +15%, weekly +2%. Also ingested the 2,000-sense pilot (`build/llm_pilot/`, incl. 500 TDK tr→en senses).
    - 2026-10-20 00:47–01:20: all English top-50K gap chunks (en_001–en_043, ~21K senses) and TDK chunks tdk_001–tdk_018 (18K of 80.7K senses, 1,000 per chunk) done → 94,573 llm rows. Cost of that window: 5-hour 0→90%, weekly 22→34%. EN→TR "any" for ranks 20K–50K 68.6→73.3%; Turkish words with only a Turkish definition 1.6→0.1%.
@@ -57,7 +66,6 @@ Still open (in priority order):
    - 2026-10-31: tdk_067–tdk_078 done → 241,315 llm rows, shipped as 2.0.1 (versionCode 8).
    - 2026-11-01 01:27 MDT: tdk_079–tdk_081 done → 247,701 llm rows, shipped as 2.0.2 (versionCode 9), installed on the Pixel. **TDK pass complete: all 81 chunks (80.7K senses) translated and validated.** Weekly usage 24% before this run. Coverage bands unchanged (the TDK headwords are mostly outside the top 50K).
    - Workflow for any future batch: agents read `build/llm_agent/<chunk>.prompt.txt`; validate (same `i` set, right key, delete `*_part*`), `ingest`, `ingest_forms`, `coverage_report`, **bump versionCode**, build, `adb install -r -t` (the phone may show up under its mDNS serial `adb-58231FDCR007H8-…` instead of IP:port).
-   - Next gap after TDK: Turkish forms Wiktionary has no table for (gerektiğini, yaptığını, kendini) → Zemberek (Apache-2.0, Java) at build time over a large Turkish word list to extend `forms`.
    - Installing: the Pixel now runs a build signed with this PC's debug key, so `adb install -r -t app/build/outputs/apk/debug/app-debug.apk` updates in place. **Bump `versionCode` whenever dictionary.db changes** — the app only re-copies the asset when the version code differs (DictionaryDb stamp); an install with the same code keeps the old DB. Currently 1.3.1 / versionCode 6. Wireless-debugging IP/port change often (randomized MAC): find the phone with `arp -a` (locally administered MAC) and `adb connect <ip>:<port>`. A session-only cron runs them after each 5-hour reset (~25 chunks per window, stops at 85% / weekly 70%), then ingests and rebuilds. To resume by hand: pending = `build/llm_agent/*.jsonl` without a full `.out.jsonl`; launch Haiku agents with `python -m llm_agent_batches prompt <chunk>`; then `ingest`, `ingest_forms`, `coverage_report`.
    - Agents share a scratch folder; prompts now tell them to name part files after their chunk. Validate outputs (same `i` set as input, right key) before `ingest`.
 3. DB size: 684 MB before MT (the Turkish `forms` links are ~2.3M rows). Frequency-filtering forms or opening the asset in place (requery/sqlite-android) would cut the on-device footprint.
