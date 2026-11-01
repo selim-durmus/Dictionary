@@ -10,6 +10,10 @@ MVP is functional and feature-complete: 3-tab pager (Search/Recents/Top 50), ent
 
 **The open problem: missing translations.** Measure it with `cd data-pipeline && python -m coverage_report --words` (OpenSubtitles top-50K words per language in rank bands + the hand-picked list in `coverage_words.py`). See "Coverage work (2026-10-19)" below for where it stands; the OPUS-MT sections further down are history.
 
+## UI v2.0.0 (2026-10-31)
+
+Rebuilt from scratch in Material You: dynamic colors + light/dark, bottom nav (Search / Saved / History with Recent|Top 50), one card per headword (numbered translations by part of speech, AI/MT/PanLex tags), word page with collapsing header (pronounce, copy, save), favorites table (UserDb v2 migration), restyled widget. Code: `ui/DictionaryApp.kt`, `ui/SearchScreen.kt`, `ui/WordDetailScreen.kt`, `ui/ListScreens.kt`, `ui/ViewModels.kt`, `ui/model/WordModels.kt`, `ui/components/Components.kt`. Note when testing over adb: a YouTube picture-in-picture window swallowed taps in the top-right corner — not an app bug.
+
 ## Coverage work (2026-10-19)
 
 Measured on a fresh build (Kaikki dumps of 2026-10-03). "Dictionary" = hand-written dictionary data (Wiktionary EN + TR editions, reverse pairs); "any" also counts PanLex/MT.
@@ -51,6 +55,8 @@ Still open (in priority order):
    - 2026-10-20 10:47–11:17: tdk_041–tdk_061 done (21 chunks) → 201,931 llm rows total. Window cost: 5-hour 0→94%, weekly 46→58%.
    - 2026-10-20 18:12: tdk_062–tdk_066 done (5 chunks, stopped at the user's 70% weekly cap) → 214,469 llm rows total. Weekly 67→70%. DB 802 MB, debug APK 300 MB.
    - Remaining: tdk_067–tdk_081 (15 chunks) — run after the weekly reset (2026-10-26). No cron is scheduled.
+   - 2026-10-31: tdk_067–tdk_078 launched (agents read `build/llm_agent/<chunk>.prompt.txt`); tdk_079–tdk_081 still to launch after the 5-hour reset (~07:20 UTC Nov 1). Then validate (same `i` set, key "en", delete `*_part*`), `ingest`, `ingest_forms`, `coverage_report`, **bump versionCode**, build, `adb install -r -t`.
+   - Next gap after TDK: Turkish forms Wiktionary has no table for (gerektiğini, yaptığını, kendini) → Zemberek (Apache-2.0, Java) at build time over a large Turkish word list to extend `forms`.
    - Installing: the Pixel now runs a build signed with this PC's debug key, so `adb install -r -t app/build/outputs/apk/debug/app-debug.apk` updates in place. **Bump `versionCode` whenever dictionary.db changes** — the app only re-copies the asset when the version code differs (DictionaryDb stamp); an install with the same code keeps the old DB. Currently 1.3.1 / versionCode 6. Wireless-debugging IP/port change often (randomized MAC): find the phone with `arp -a` (locally administered MAC) and `adb connect <ip>:<port>`. A session-only cron runs them after each 5-hour reset (~25 chunks per window, stops at 85% / weekly 70%), then ingests and rebuilds. To resume by hand: pending = `build/llm_agent/*.jsonl` without a full `.out.jsonl`; launch Haiku agents with `python -m llm_agent_batches prompt <chunk>`; then `ingest`, `ingest_forms`, `coverage_report`.
    - Agents share a scratch folder; prompts now tell them to name part files after their chunk. Validate outputs (same `i` set as input, right key) before `ingest`.
 3. DB size: 684 MB before MT (the Turkish `forms` links are ~2.3M rows). Frequency-filtering forms or opening the asset in place (requery/sqlite-android) would cut the on-device footprint.
